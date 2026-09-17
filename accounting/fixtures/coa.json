@@ -1,0 +1,15 @@
+[
+  {"model": "accounting.account", "pk": 1,  "fields": {"created_at": "2026-09-16T00:00:00Z", "updated_at": "2026-09-16T00:00:00Z", "account_code": "1001",  "account_name": "Cash on Hand",                "account_type": "ASSET",     "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 2,  "fields": {"created_at": "2026-09-16T00:00:00Z", "updated_at": "2026-09-16T00:00:00Z", "account_code": "1301",  "account_name": "Loans Receivable",            "account_type": "ASSET",     "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 3,  "fields": {"created_at": "2026-09-16T00:00:00Z", "updated_at": "2026-09-16T00:00:00Z", "account_code": "2101",  "account_name": "Member Voluntary Deposits",   "account_type": "LIABILITY", "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 4,  "fields": {"created_at": "2026-09-16T00:00:00Z", "updated_at": "2026-09-16T00:00:00Z", "account_code": "3101",  "account_name": "Kapital Sosial",              "account_type": "EQUITY",    "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 5,  "fields": {"account_code": "3200",  "account_name": "SHU Payable",                 "account_type": "LIABILITY", "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 6,  "fields": {"account_code": "3501",  "account_name": "Reserva Legal",               "account_type": "EQUITY",    "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 7,  "fields": {"account_code": "3502",  "account_name": "Admin & Operational Fund",    "account_type": "EQUITY",    "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 8,  "fields": {"account_code": "3900",  "account_name": "Retained Surplus",            "account_type": "EQUITY",    "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 9,  "fields": {"account_code": "40100", "account_name": "Interest Income from Loans",  "account_type": "REVENUE",   "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 10, "fields": {"account_code": "5101",  "account_name": "AGM Expense",                 "account_type": "EXPENSE",   "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 11, "fields": {"account_code": "5102",  "account_name": "Salaries Expense",            "account_type": "EXPENSE",   "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 12, "fields": {"account_code": "5103",  "account_name": "Utilities Expense",           "account_type": "EXPENSE",   "parent_account_code": null, "status": "ACTIVE"}},
+  {"model": "accounting.account", "pk": 13, "fields": {"account_code": "5104",  "account_name": "Office Supplies Expense",     "account_type": "EXPENSE",   "parent_account_code": null, "status": "ACTIVE"}}
+]

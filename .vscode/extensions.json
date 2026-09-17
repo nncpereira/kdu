@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "charliermarsh.ruff",
+    "batisteo.vscode-django",
+    "mikestead.dotenv",
+    "eamodio.gitlens"
+  ]
+}

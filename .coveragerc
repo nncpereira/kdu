@@ -1,0 +1,27 @@
+[run]
+branch = True
+source = .
+omit =
+    */migrations/*
+    */tests/*
+    */__init__.py
+    */admin.py
+    */apps.py
+    */manage.py
+    */settings/*
+    */wsgi.py
+    */asgi.py
+    */conftest.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug
+    if __name__ == .__main__.:
+    raise NotImplementedError
+
+fail_under = 80
+
+[html]
+directory = htmlcov

@@ -1,0 +1,73 @@
+[
+  {
+    "model": "members.membersequence",
+    "pk": 1,
+    "fields": {"last_value": 3}
+  },
+  {
+    "model": "members.member",
+    "pk": "11111111-1111-1111-1111-111111111111",
+    "fields": {
+      "membership_number": "KDU-000001",
+      "first_name": "Maria",
+      "middle_name": "",
+      "last_name": "Test",
+      "salutation": "Ms",
+      "phone_number": "77000001",
+      "email": "maria@example.com",
+      "date_of_birth": "1990-05-10",
+      "aldeia": "A1", "suco": "S1", "posto": "P1", "municipio": "Dili",
+      "profession": "Vendor",
+      "status": "Active",
+      "kapital_sosial_balance": "50.00",
+      "date_joined": "2024-05-10",
+      "user": null,
+      "created_at": "2024-05-10T00:00:00Z",
+      "updated_at": "2024-05-10T00:00:00Z"
+    }
+  },
+  {
+    "model": "members.member",
+    "pk": "22222222-2222-2222-2222-222222222222",
+    "fields": {
+      "membership_number": "KDU-000002",
+      "first_name": "Ana",
+      "middle_name": "",
+      "last_name": "Test",
+      "salutation": "Ms",
+      "phone_number": "77000002",
+      "email": "ana@example.com",
+      "date_of_birth": "1992-08-02",
+      "aldeia": "A2", "suco": "S2", "posto": "P2", "municipio": "Baucau",
+      "profession": "Farmer",
+      "status": "Active",
+      "kapital_sosial_balance": "50.00",
+      "date_joined": "2025-08-02",
+      "user": null,
+      "created_at": "2025-08-02T00:00:00Z",
+      "updated_at": "2025-08-02T00:00:00Z"
+    }
+  },
+  {
+    "model": "members.member",
+    "pk": "33333333-3333-3333-3333-333333333333",
+    "fields": {
+      "membership_number": "KDU-000003",
+      "first_name": "Pedro",
+      "middle_name": "",
+      "last_name": "Test",
+      "salutation": "Mr",
+      "phone_number": "77000003",
+      "email": "pedro@example.com",
+      "date_of_birth": "1988-12-15",
+      "aldeia": "A3", "suco": "S3", "posto": "P3", "municipio": "Ermera",
+      "profession": "Driver",
+      "status": "Active",
+      "kapital_sosial_balance": "50.00",
+      "date_joined": "2025-12-15",
+      "user": null,
+      "created_at": "2025-12-15T00:00:00Z",
+      "updated_at": "2025-12-15T00:00:00Z"
+    }
+  }
+]
