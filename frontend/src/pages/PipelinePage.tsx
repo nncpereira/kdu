@@ -8,7 +8,8 @@ import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Table } from "@/components/Table";
-import { formatMoney } from "@/lib/format";
+import { toast } from "sonner";
+import { TableSkeleton } from "@/components/Skeleton";
 
 export function PipelinePage() {
   const { profile } = useAuth();
@@ -33,7 +34,9 @@ export function PipelinePage() {
       if (args.action === "certify") return certifyActor(args.id);
       return rejectActor(args.id, "rejected by " + role);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const verb = variables.action === "check" ? "approved" : variables.action === "certify" ? "certified" : "rejected";
+      toast.success(`Transaction ${verb}.`);
       // Broad invalidation — React Query matches by prefix, so "member"
       // catches ["member", id], "savings" catches ["savings", "voluntary", id], etc.
       qc.invalidateQueries({ queryKey: ["pipeline"] });
@@ -45,10 +48,14 @@ export function PipelinePage() {
       qc.invalidateQueries({ queryKey: ["loan"] });
       qc.invalidateQueries({ queryKey: ["repayments"] });
     },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
+    },
   });
 
   const rows = [...(checkQuery.data ?? []), ...(certifyQuery.data ?? [])];
   const isLoading = checkQuery.isLoading || certifyQuery.isLoading;
+  const isError = checkQuery.isError || certifyQuery.isError;
 
   return (
     <div className="p-6 space-y-6">
@@ -60,16 +67,18 @@ export function PipelinePage() {
       </div>
 
       <Card>
-        {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+        {isError && (
+          <p className="text-sm text-red-600 py-8 text-center">
+            Failed to load pipeline items.
+          </p>
         )}
 
-        {!isLoading && (
+        {!isError && (
           <Table
             headers={["Type", "Details", "Maker", "Status", "Actions"]}
-            empty={rows.length === 0}
+            empty={!isLoading && rows.length === 0}
           >
-            {rows.map((r) => (
+            {isLoading ? <TableSkeleton rows={5} cols={5} /> : rows.map((r) => (
               <tr
                 key={r.id}
                 className="border-b border-gray-100 hover:bg-gray-50"
@@ -87,6 +96,16 @@ export function PipelinePage() {
                     <div className="text-xs text-gray-500 mt-0.5 font-mono">
                       {r.target_summary.member_number}
                     </div>
+                  )}
+                  {r.target_summary?.has_receipt && r.target_summary?.receipt_url && (
+                    <a
+                      href={r.target_summary.receipt_url as string}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block mt-1 text-xs text-brand-600 hover:underline"
+                    >
+                      📎 View receipt
+                    </a>
                   )}
                 </td>
                 <td className="py-3 px-2 text-sm text-gray-600">

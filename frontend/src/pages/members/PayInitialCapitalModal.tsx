@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -20,6 +21,7 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
   const mutation = useMutation({
     mutationFn: (amt: string) => payInitialCapital(member!.id, amt),
     onSuccess: () => {
+      toast.success("Initial capital submitted for approval.");
       qc.invalidateQueries({ queryKey: ["members"] });
       qc.invalidateQueries({ queryKey: ["member", member!.id] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
@@ -27,6 +29,7 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
       onClose();
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       const detail =
         err?.response?.data?.detail ??
         err?.response?.data?.fields?.amount?.[0] ??

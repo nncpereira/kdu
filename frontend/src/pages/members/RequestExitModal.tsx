@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -19,12 +20,14 @@ export function RequestExitModal({ member, open, onClose }: Props) {
   const mutation = useMutation({
     mutationFn: (r: string) => requestMemberExit(member!.id, r),
     onSuccess: () => {
+      toast.success("Exit request submitted for approval.");
       qc.invalidateQueries({ queryKey: ["members"] });
       qc.invalidateQueries({ queryKey: ["member", member!.id] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       onClose();
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       setError(err?.response?.data?.detail ?? "Exit request failed.");
     },
   });

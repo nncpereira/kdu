@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -38,6 +39,7 @@ export function ManualRepaymentModal({ loan, open, onClose }: Props) {
         payment_date: paymentDate,
       }),
     onSuccess: () => {
+      toast.success("Repayment submitted for approval.");
       qc.invalidateQueries({ queryKey: ["loan", loan!.id] });
       qc.invalidateQueries({ queryKey: ["loans"] });
       qc.invalidateQueries({ queryKey: ["repayments", loan!.id] });
@@ -45,6 +47,7 @@ export function ManualRepaymentModal({ loan, open, onClose }: Props) {
       onClose();
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       setError(err?.response?.data?.detail ?? "Repayment failed.");
     },
   });

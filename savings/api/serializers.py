@@ -35,17 +35,31 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 class DepositRequestSerializer(serializers.Serializer):
     member = serializers.UUIDField()
-    amount = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal("0.01"))
+    amount = serializers.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
 
 
 class WithdrawRequestSerializer(serializers.Serializer):
     member = serializers.UUIDField()
-    amount = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal("0.01"))
+    amount = serializers.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
 
 
 class VoluntaryDepositSerializer(serializers.ModelSerializer):
-    updated_at = serializers.DateTimeField(allow_null=True, required=False)
-    
+    updated_at = serializers.DateTimeField(read_only=True, allow_null=True)
+
     class Meta:
         model = MemberVoluntaryDeposit
-        fields = ["member", "balance_available", "balance_held_pipeline", "updated_at"]
+        fields = [
+            "member",
+            "balance_available",
+            "balance_held_pipeline",
+            "updated_at",
+        ]
+        read_only_fields = fields

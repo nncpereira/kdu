@@ -1,0 +1,65 @@
+{% extends "reports/base.html" %}
+
+{% block content %}
+<table class="summary-grid">
+  <tr>
+    <td class="summary-box">
+      <div class="label">Total Revenue</div>
+      <div class="value" style="color: #047857">{{ total_revenue }}</div>
+    </td>
+    <td class="summary-box">
+      <div class="label">Total Expenses</div>
+      <div class="value" style="color: #b91c1c">{{ total_expenses }}</div>
+    </td>
+    <td class="summary-box">
+      <div class="label">Net Surplus</div>
+      <div class="value">{{ net_surplus }}</div>
+    </td>
+    <td class="summary-box" style="border: none">&nbsp;</td>
+  </tr>
+</table>
+
+<div class="section-title">Revenue</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 15%">Code</th>
+      <th style="width: 65%">Account</th>
+      <th class="amount" style="width: 20%">Credit</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in revenue %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="amount">{{ r.credit }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color: #888; font-style: italic">No revenue recorded in this period.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Expenses</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 15%">Code</th>
+      <th style="width: 65%">Account</th>
+      <th class="amount" style="width: 20%">Debit</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in expenses %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="amount">{{ r.debit }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color: #888; font-style: italic">No expenses recorded in this period.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

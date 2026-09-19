@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -42,11 +43,13 @@ export function ProposeSplitModal({ open, onClose }: Props) {
         effective_from: effectiveFrom,
       }),
     onSuccess: () => {
+      toast.success("SHU split proposed. Awaiting approval.");
       qc.invalidateQueries({ queryKey: ["governance"] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       onClose();
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       setError(err?.response?.data?.detail ?? "Proposal failed.");
     },
   });

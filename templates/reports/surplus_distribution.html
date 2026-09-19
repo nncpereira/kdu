@@ -1,0 +1,35 @@
+{% extends "reports/base.html" %}
+
+{% block content %}
+<table class="summary-grid">
+  <tr>
+    <td class="summary-box"><div class="label">Net Surplus</div><div class="value">{{ net_surplus }}</div></td>
+    <td class="summary-box"><div class="label">Reserva Legal</div><div class="value">{{ reserva_legal_amt }}</div><div class="mono">{{ reserva_legal_pct }}%</div></td>
+    <td class="summary-box"><div class="label">Admin Fund</div><div class="value">{{ admin_fund_amt }}</div><div class="mono">{{ admin_fund_pct }}%</div></td>
+    <td class="summary-box"><div class="label">Status</div><div class="value">{{ status }}</div></td>
+  </tr>
+</table>
+
+<div class="section-title">SHU Allocation</div>
+<table>
+  <thead><tr><th>Allocation</th><th class="amount">Amount</th></tr></thead>
+  <tbody>
+    <tr><td>Jasa Simpanan ({{ jasa_simpanan_pct }}%)</td><td class="amount">{{ jasa_simpanan_amt }}</td></tr>
+    <tr><td>Jasa Bunga ({{ jasa_bunga_pct }}%)</td><td class="amount">{{ jasa_bunga_amt }}</td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">Member Payouts</div>
+<table>
+  <thead><tr><th>Member</th><th>Full Name</th><th class="amount">Jasa Simpanan</th><th class="amount">Jasa Bunga</th><th class="amount">Net Payout</th></tr></thead>
+  <tbody>
+    {% for p in payouts %}
+    <tr>
+      <td class="mono">{{ p.member_number }}</td><td>{{ p.full_name }}</td>
+      <td class="amount">{{ p.jasa_simpanan_gross }}</td><td class="amount">{{ p.jasa_bunga_gross }}</td><td class="amount">{{ p.net_payout }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="5" style="color:#888;font-style:italic">No member payouts computed.</td></tr>{% endfor %}
+    <tr class="total-row"><td colspan="4">Total Payout</td><td class="amount">{{ total_payout }}</td></tr>
+  </tbody>
+</table>
+{% endblock %}

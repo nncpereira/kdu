@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -48,6 +49,7 @@ export function ScheduledRepaymentModal({ loan, open, onClose }: Props) {
         payment_date: paymentDate,
       }),
     onSuccess: () => {
+      toast.success("Installment submitted for approval.");
       qc.invalidateQueries({ queryKey: ["loan", loan!.id] });
       qc.invalidateQueries({ queryKey: ["loans"] });
       qc.invalidateQueries({ queryKey: ["repayments", loan!.id] });
@@ -55,6 +57,7 @@ export function ScheduledRepaymentModal({ loan, open, onClose }: Props) {
       onClose();
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       const detail = err?.response?.data?.detail;
       if (typeof detail === "string" && detail.includes("INSUFFICIENT")) {
         setError(

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TableSkeleton } from "@/components/Skeleton";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { listMembers, Member, MemberStatus } from "@/api/members";
@@ -87,7 +88,7 @@ export function MembersPage() {
         </div>
 
         {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={5} cols={7} />
         )}
         {isError && (
           <p className="text-sm text-red-600 py-8 text-center">

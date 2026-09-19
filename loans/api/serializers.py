@@ -68,5 +68,6 @@ class LoanRepaymentSerializer(serializers.ModelSerializer):
             "payment_date",
             "mode",
             "status",
+            "journal_entry",
             "created_at",
         ]

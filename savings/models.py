@@ -36,6 +36,7 @@ class Transaction(UUIDTimeStampedModel):
         PENDING_CERTIFY = "PENDING_CERTIFY", "Pending Certify"
         COMPLETED = "COMPLETED", "Completed"
         REJECTED = "REJECTED", "Rejected"
+        REVERSED = "REVERSED", "Reversed"
 
     member = models.ForeignKey(
         "members.Member", on_delete=models.PROTECT, related_name="savings_transactions"

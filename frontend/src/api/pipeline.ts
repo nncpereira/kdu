@@ -1,25 +1,13 @@
 import { api } from "./client";
 
-export interface PipelineActor {
-  id: string;
-  transaction_type: string;
-  target_record_id: string;
-  maker: string;
-  maker_username: string;
-  checker: string | null;
-  checker_username: string | null;
-  certifier: string | null;
-  certifier_username: string | null;
-  status: "PENDING_CHECK" | "PENDING_CERTIFY" | "COMPLETED" | "REJECTED";
-  updated_at: string;
-}
-
 export interface TargetSummary {
   label: string;
   kind: string;
   member_number?: string;
   member_name?: string;
   amount?: string;
+  has_receipt?: boolean;
+  receipt_url?: string | null;
   [key: string]: unknown;
 }
 
@@ -35,7 +23,7 @@ export interface PipelineActor {
   certifier_username: string | null;
   status: "PENDING_CHECK" | "PENDING_CERTIFY" | "COMPLETED" | "REJECTED";
   updated_at: string;
-  target_summary: TargetSummary | null;   // ← new
+  target_summary: TargetSummary | null;
 }
 
 export async function listPendingCheck(): Promise<PipelineActor[]> {

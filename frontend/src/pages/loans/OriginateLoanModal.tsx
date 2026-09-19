@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
@@ -44,6 +45,7 @@ export function OriginateLoanModal({ open, onClose, presetMemberId }: Props) {
         purpose,
       }),
     onSuccess: (loan) => {
+      toast.success("Loan created. Awaiting approval.");
       qc.invalidateQueries({ queryKey: ["loans"] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -52,6 +54,7 @@ export function OriginateLoanModal({ open, onClose, presetMemberId }: Props) {
       window.location.href = `/loans/${loan.id}`;
     },
     onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Action failed.");
       setError(
         err?.response?.data?.detail ??
           err?.response?.data?.fields?.principal?.[0] ??

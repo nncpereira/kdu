@@ -1,27 +1,30 @@
 import { useState } from "react";
+import { TableSkeleton } from "@/components/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import {
   getTrialBalance,
   getIncomeStatement,
   getBalanceSheet,
   getSurplusDistribution,
-  TrialBalanceRow,
 } from "@/api/reports";
 import { listFiscalYears } from "@/api/shu";
+import { listReversals } from "@/api/reversals";
 import { Card } from "@/components/Card";
 import { Table } from "@/components/Table";
 import { DatePicker } from "@/components/DatePicker";
 import { Badge } from "@/components/Badge";
 import { formatMoney, formatDate } from "@/lib/format";
 import clsx from "clsx";
+import { DownloadPdfButton } from "@/components/DownloadPdfButton";
 
-type Tab = "trial-balance" | "income-statement" | "balance-sheet" | "surplus";
+type Tab = "trial-balance" | "income-statement" | "balance-sheet" | "surplus" | "reversals";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "trial-balance", label: "Trial Balance" },
   { id: "income-statement", label: "Income Statement" },
   { id: "balance-sheet", label: "Balance Sheet" },
   { id: "surplus", label: "Surplus Distribution" },
+  { id: "reversals", label: "Reversals" },
 ];
 
 export function ReportsPage() {
@@ -60,6 +63,7 @@ export function ReportsPage() {
       {tab === "income-statement" && <IncomeStatementTab />}
       {tab === "balance-sheet" && <BalanceSheetTab />}
       {tab === "surplus" && <SurplusDistributionTab />}
+      {tab === "reversals" && <ReversalsTab />}
     </div>
   );
 }
@@ -91,6 +95,11 @@ function TrialBalanceTab() {
       <Card>
         <div className="flex flex-wrap items-end gap-4">
           <DatePicker label="As of" value={asOf} onChange={setAsOf} />
+          <DownloadPdfButton
+            url={`/reports/trial-balance/pdf/?as_of=${asOf}`}
+            filename={`trial-balance-${asOf}.pdf`}
+            disabled={!asOf}
+          />
           <div className="ml-auto flex gap-4 text-sm">
             <div>
               <span className="text-gray-500">Total Debits: </span>
@@ -120,7 +129,7 @@ function TrialBalanceTab() {
 
       <Card title="Trial Balance">
         {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={8} cols={6} />
         )}
         {isError && (
           <p className="text-sm text-red-600 py-8 text-center">
@@ -188,14 +197,19 @@ function IncomeStatementTab() {
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap items-end gap-4">
-          <DatePicker label="From" value={start} onChange={setStart} />
-          <DatePicker label="To" value={end} onChange={setEnd} />
-        </div>
+        <DatePicker label="From" value={start} onChange={setStart} />
+        <DatePicker label="To" value={end} onChange={setEnd} />
+        <DownloadPdfButton
+          url={`/reports/income-statement/pdf/?start=${start}&end=${end}`}
+          filename={`income-statement-${start}-${end}.pdf`}
+          disabled={!start || !end}
+        />
+      </div>
       </Card>
 
       {isLoading && (
         <Card>
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={8} cols={6} />
         </Card>
       )}
       {isError && (
@@ -286,6 +300,11 @@ function BalanceSheetTab() {
       <Card>
         <div className="flex flex-wrap items-end gap-4">
           <DatePicker label="As of" value={asOf} onChange={setAsOf} />
+          <DownloadPdfButton
+            url={`/reports/balance-sheet/pdf/?as_of=${asOf}`}
+            filename={`balance-sheet-${asOf}.pdf`}
+            disabled={!asOf}
+          />
           {data && (
             <div
               className={clsx(
@@ -305,7 +324,7 @@ function BalanceSheetTab() {
 
       {isLoading && (
         <Card>
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={8} cols={6} />
         </Card>
       )}
       {isError && (
@@ -454,12 +473,18 @@ function SurplusDistributionTab() {
               ))}
             </select>
           </div>
+          {fyId && (
+            <DownloadPdfButton
+              url={`/reports/surplus-distribution/${fyId}/pdf/`}
+              filename={`shu-${fyId}.pdf`}
+            />
+          )}
         </div>
       </Card>
 
       {isLoading && (
         <Card>
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={8} cols={6} />
         </Card>
       )}
 
@@ -521,6 +546,61 @@ function SurplusDistributionTab() {
         </>
       )}
     </div>
+  );
+}
+
+function ReversalsTab() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["reversals"],
+    queryFn: listReversals,
+  });
+
+  return (
+    <Card title="Reversal History">
+      {isLoading && (
+        <TableSkeleton rows={8} cols={6} />
+      )}
+      {isError && (
+        <p className="text-sm text-red-600 py-8 text-center">
+          Failed to load reversal history.
+        </p>
+      )}
+      {!isLoading && !isError && data && (
+        <Table
+          headers={[
+            "Requested",
+            "Original Entry",
+            "Reason",
+            "Requested by",
+            "Status",
+          ]}
+          empty={data.length === 0}
+        >
+          {data.map((r) => (
+            <tr key={r.id} className="border-b border-gray-100">
+              <td className="py-2 px-2 text-xs text-gray-500">
+                {new Date(r.created_at).toLocaleDateString()}
+              </td>
+              <td className="py-2 px-2 text-sm">
+                {r.original_description}
+                <span className="block text-xs text-gray-400">
+                  {new Date(r.original_entry_date).toLocaleDateString()}
+                </span>
+              </td>
+              <td className="py-2 px-2 text-sm text-gray-700 max-w-md truncate">
+                {r.reason}
+              </td>
+              <td className="py-2 px-2 text-xs text-gray-600">
+                {r.maker_username ?? "—"}
+              </td>
+              <td className="py-2 px-2">
+                <Badge value={r.status} />
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </Card>
   );
 }
 

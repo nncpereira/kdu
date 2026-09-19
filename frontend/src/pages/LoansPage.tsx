@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TableSkeleton } from "@/components/Skeleton";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { listLoans, Loan, LoanStatus } from "@/api/loans";
@@ -73,7 +74,7 @@ export function LoansPage() {
         </div>
 
         {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={5} cols={8} />
         )}
         {isError && (
           <p className="text-sm text-red-600 py-8 text-center">

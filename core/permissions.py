@@ -100,3 +100,7 @@ class IsStaffReadExpenses(HasRole):
     """
 
     roles = {"MAKER", "CHECKER", "CERTIFIER", "BOARD", "SUPERADMIN"}
+
+
+class IsStaffReadLedger(HasRole):
+    roles = {"MAKER", "CHECKER", "CERTIFIER", "BOARD", "SUPERADMIN"}

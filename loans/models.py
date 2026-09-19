@@ -50,6 +50,7 @@ class LoanRepayment(UUIDTimeStampedModel):
         PENDING_CERTIFY = "PENDING_CERTIFY", "Pending Certify"
         COMPLETED = "COMPLETED", "Completed"
         REJECTED = "REJECTED", "Rejected"
+        REVERSED = "REVERSED", "Reversed"
 
     loan = models.ForeignKey(Loan, on_delete=models.PROTECT, related_name="repayments")
     principal_paid = models.DecimalField(max_digits=18, decimal_places=2)

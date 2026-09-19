@@ -14,3 +14,96 @@
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
 }
+
+/* ==============================================================
+   Print stylesheet
+   Used when the user hits Cmd+P / Ctrl+P on any page.
+   ============================================================== */
+@media print {
+
+    /* Hide chrome */
+    aside,
+    .no-print,
+    nav,
+    button,
+    .print-hide {
+        display: none !important;
+    }
+
+    /* Full-width content */
+    body,
+    html,
+    #root {
+        background: white !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    main {
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Flatten cards for print */
+    .bg-white,
+    .bg-gray-50,
+    .shadow,
+    .shadow-md,
+    .shadow-lg,
+    .shadow-xl {
+        background: white !important;
+        box-shadow: none !important;
+    }
+
+    /* Borders stay sharp */
+    .border,
+    .border-b,
+    .border-t {
+        border-color: #999 !important;
+    }
+
+    /* Tables: don't break rows */
+    table {
+        page-break-inside: auto;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    /* Font size for print */
+    body {
+        font-size: 11pt;
+    }
+
+    h1 {
+        font-size: 16pt;
+    }
+
+    h2 {
+        font-size: 14pt;
+    }
+
+    /* Show URLs after links */
+    a[href]:after {
+        content: "";
+    }
+}
+
+/* Optional: a small helper class for elements that should
+   only appear when printing. */
+.print-only {
+    display: none;
+}
+
+@media print {
+    .print-only {
+        display: block;
+    }
+}

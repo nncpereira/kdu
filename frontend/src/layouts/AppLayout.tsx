@@ -1,8 +1,9 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "@/auth/useAuth";
 import clsx from "clsx";
+import { useAuth } from "@/auth/useAuth";
+import { Logo } from "@/components/Logo";
 
-const NAV = [
+const NAV: { to: string; label: string; role?: string }[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/members", label: "Members" },
   { to: "/savings", label: "Savings" },
@@ -20,47 +21,80 @@ export function AppLayout() {
   const location = useLocation();
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-gray-50">
       <aside className="w-60 bg-brand-700 text-white flex flex-col">
+        {/* Letterhead with logo */}
         <div className="px-5 py-5 border-b border-brand-600">
-          <h1 className="text-lg font-bold">KDU</h1>
-          <p className="text-xs text-brand-100">Cooperative Core</p>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
+              <Logo size={38} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold leading-tight tracking-tight">
+                KDU
+              </h1>
+              <p className="text-[10px] text-brand-100 uppercase tracking-widest leading-tight">
+                Cooperative Core
+              </p>
+            </div>
+          </div>
         </div>
-        <nav className="flex-1 py-4">
-          {NAV.filter((item) => !item.role || profile?.role === item.role).map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={clsx(
-                "block px-5 py-2 text-sm hover:bg-brand-600",
-                location.pathname === item.to && "bg-brand-600 font-semibold"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+
+        {/* Nav */}
+        <nav className="flex-1 py-4 overflow-y-auto">
+          {NAV.filter((item) => !item.role || profile?.role === item.role).map(
+            (item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={clsx(
+                  "block px-5 py-2.5 text-sm transition-colors",
+                  location.pathname === item.to
+                    ? "bg-brand-600 font-semibold"
+                    : "hover:bg-brand-600"
+                )}
+              >
+                {item.label}
+              </Link>
+            )
+          )}
         </nav>
-        <div className="px-5 py-4 border-t border-brand-600 text-xs">
+
+        {/* User footer */}
+        <div className="border-t border-brand-600">
           <Link
             to="/profile"
             className={clsx(
-              "block hover:bg-brand-600 -mx-5 px-5 py-2",
-              location.pathname === "/profile" && "bg-brand-600"
+              "block px-5 py-4 transition-colors",
+              location.pathname === "/profile"
+                ? "bg-brand-600"
+                : "hover:bg-brand-600"
             )}
           >
-            <p className="font-medium">{profile?.username}</p>
-            <p className="text-brand-100">{profile?.role}</p>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold shrink-0">
+                {(profile?.username ?? "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium truncate">
+                  {profile?.first_name || profile?.username}
+                </p>
+                <p className="text-[10px] text-brand-100 uppercase tracking-wider truncate">
+                  {profile?.role}
+                </p>
+              </div>
+            </div>
           </Link>
           <button
             onClick={logout}
-            className="mt-2 text-brand-100 hover:text-white underline"
+            className="w-full text-left px-5 py-2.5 text-xs text-brand-100 hover:bg-brand-600 hover:text-white transition-colors"
           >
             Log out
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-gray-50">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>

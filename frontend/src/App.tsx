@@ -20,10 +20,17 @@ import { ShuDetailPage } from "@/pages/ShuDetailPage";
 import { GovernancePage } from "@/pages/GovernancePage";
 import { UsersPage } from "@/pages/UsersPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { Toaster } from "sonner";
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+      />
       <AuthProvider>
         <BrowserRouter>
           <Routes>

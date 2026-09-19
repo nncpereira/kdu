@@ -13,6 +13,8 @@ import { Table } from "@/components/Table";
 import { formatMoney } from "@/lib/format";
 import { DepositModal } from "./savings/DepositModal";
 import { WithdrawModal } from "./savings/WithdrawModal";
+import { ReverseModal } from "@/components/ReverseModal";
+import { TableSkeleton } from "@/components/Skeleton";
 
 export function SavingsPage() {
   const { profile } = useAuth();
@@ -20,11 +22,10 @@ export function SavingsPage() {
   const [memberFilter, setMemberFilter] = useState("");
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState<SavingsTransaction | null>(null);
 
   const canMake =
     profile?.role === "MAKER" || profile?.role === "SUPERADMIN";
-  const canView = true; // All staff can view savings transactions
-
   const { data, isLoading, isError } = useQuery({
     queryKey: ["savings", "transactions", { typeFilter, memberFilter }],
     queryFn: () =>
@@ -32,7 +33,6 @@ export function SavingsPage() {
         type: typeFilter || undefined,
         member: memberFilter || undefined,
       }),
-    // enabled: canView || canMake,
   });
 
   // The endpoint may return a plain list or a paginated object
@@ -96,6 +96,12 @@ export function SavingsPage() {
 
       <Card>
         <div className="flex flex-wrap gap-3 mb-4">
+          <input
+            value={memberFilter}
+            onChange={(e) => setMemberFilter(e.target.value)}
+            placeholder="Filter by member number..."
+            className="border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
           <select
             value={typeFilter}
             onChange={(e) =>
@@ -109,61 +115,57 @@ export function SavingsPage() {
           </select>
         </div>
 
-        {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
-        )}
-        {isError && (
+        {isError ? (
           <p className="text-sm text-red-600 py-8 text-center">
             Failed to load transactions.
           </p>
-        )}
-
-        {!isLoading && !isError && (
-          <Table
-            headers={[
-              "Date",
-              "Type",
-              "Member",
-              "Amount",
-              "Obligatory",
-              "Voluntary",
-              "Status",
-            ]}
-            empty={rows.length === 0}
-          >
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="border-b border-gray-100 hover:bg-gray-50"
-              >
-                <td className="py-2 px-2 text-gray-500 text-xs">
-                  {new Date(r.created_at).toLocaleString()}
-                </td>
-                <td className="py-2 px-2">
-                  <Badge value={r.transaction_type} />
-                </td>
-                <td className="py-2 px-2">
-                  <span className="font-medium">{r.member_number}</span>
-                </td>
-                <td className="py-2 px-2 font-medium">
-                  ${formatMoney(r.requested_amount)}
-                </td>
-                <td className="py-2 px-2 text-gray-600">
-                  {r.transaction_type === "DEPOSIT"
-                    ? `$${formatMoney(r.obligatory_portion)}`
-                    : "—"}
-                </td>
-                <td className="py-2 px-2 text-gray-600">
-                  {r.transaction_type === "DEPOSIT"
-                    ? `$${formatMoney(r.voluntary_portion)}`
-                    : "—"}
-                </td>
-                <td className="py-2 px-2">
-                  <Badge value={r.status} />
-                </td>
-              </tr>
-            ))}
-          </Table>
+        ) : (
+          <>
+            <Table
+              headers={[
+                "Date", "Type", "Member", "Amount", "Obligatory",
+                "Voluntary", "Status", "Actions",
+              ]}
+              empty={!isLoading && rows.length === 0}
+            >
+              {isLoading ? <TableSkeleton rows={6} cols={8} /> : rows.map((r) => (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-2 px-2 text-gray-500 text-xs">
+                    {new Date(r.created_at).toLocaleString()}
+                  </td>
+                  <td className="py-2 px-2"><Badge value={r.transaction_type} /></td>
+                  <td className="py-2 px-2"><span className="font-medium">{r.member_number}</span></td>
+                  <td className="py-2 px-2 font-medium">${formatMoney(r.requested_amount)}</td>
+                  <td className="py-2 px-2 text-gray-600">
+                    {r.transaction_type === "DEPOSIT" ? `$${formatMoney(r.obligatory_portion)}` : "—"}
+                  </td>
+                  <td className="py-2 px-2 text-gray-600">
+                    {r.transaction_type === "DEPOSIT" ? `$${formatMoney(r.voluntary_portion)}` : "—"}
+                  </td>
+                  <td className="py-2 px-2"><Badge value={r.status} /></td>
+                  <td className="py-2 px-2">
+                    {r.status === "COMPLETED" && r.journal_entry && (
+                      <button onClick={() => setReverseTarget(r)} className="text-red-600 hover:underline text-xs">
+                        Reverse
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+            <ReverseModal
+              open={!!reverseTarget}
+              onClose={() => setReverseTarget(null)}
+              journalEntryId={reverseTarget?.journal_entry ?? null}
+              sourceType="SAVINGS_TRANSACTION"
+              sourceId={reverseTarget?.id}
+              description={
+                reverseTarget
+                  ? `${reverseTarget.transaction_type} $${reverseTarget.requested_amount} · ${reverseTarget.member_number}`
+                  : undefined
+              }
+            />
+          </>
         )}
       </Card>
 

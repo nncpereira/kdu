@@ -18,6 +18,9 @@ Run a single class:
 from decimal import Decimal
 
 import pytest
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 from rest_framework.test import APIClient
 
 from conftest import checker, maker
@@ -832,6 +835,114 @@ class TestExpensesHTTP:
         assert resp.status_code == 200
 
 
+class TestExpenseReceiptsHTTP:
+    def _make_png(self, name="receipt.png"):
+        """A tiny valid PNG (1x1 pixel)."""
+        import base64
+
+        # A 1x1 transparent PNG, base64-encoded.
+        png_b64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "YAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        )
+        return SimpleUploadedFile(
+            name,
+            base64.b64decode(png_b64),
+            content_type="image/png",
+        )
+
+    def test_record_expense_with_receipt(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/expenses/",
+            {
+                "description": "AGM venue with receipt",
+                "amount": "500.00",
+                "expense_account_code": "5101",
+                "payment_date": "2026-06-30",
+                "receipt": self._make_png(),
+            },
+            format="multipart",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["receipt"] is not None
+        assert resp.data["receipt_url"] is not None
+
+    def test_record_expense_without_receipt(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/expenses/",
+            {
+                "description": "No receipt",
+                "amount": "100.00",
+                "expense_account_code": "5101",
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert resp.data["receipt"] is None
+        assert resp.data["receipt_url"] is None
+
+    def test_reject_oversized_receipt(self, db, api_for, maker):
+        client = api_for(maker)
+        big = SimpleUploadedFile(
+            "big.pdf",
+            b"x" * (5 * 1024 * 1024 + 1),
+            content_type="application/pdf",
+        )
+        resp = client.post(
+            "/api/v1/expenses/",
+            {
+                "description": "Too big",
+                "amount": "100.00",
+                "expense_account_code": "5101",
+                "receipt": big,
+            },
+            format="multipart",
+        )
+        assert resp.status_code == 400
+
+    def test_reject_unsupported_extension(self, db, api_for, maker):
+        client = api_for(maker)
+        bad = SimpleUploadedFile(
+            "virus.exe",
+            b"malicious",
+            content_type="application/octet-stream",
+        )
+        resp = client.post(
+            "/api/v1/expenses/",
+            {
+                "description": "Bad file",
+                "amount": "100.00",
+                "expense_account_code": "5101",
+                "receipt": bad,
+            },
+            format="multipart",
+        )
+        assert resp.status_code == 400
+
+    def test_pipeline_summary_reports_receipt(self, db, api_for, maker, checker):
+        maker_c = api_for(maker)
+        maker_c.post(
+            "/api/v1/expenses/",
+            {
+                "description": "Sum test",
+                "amount": "250.00",
+                "expense_account_code": "5101",
+                "receipt": self._make_png(),
+            },
+            format="multipart",
+        )
+
+        checker_c = api_for(checker)
+        resp = checker_c.get("/api/v1/pipeline/pending-check/")
+        rows = [x for x in resp.data if x["transaction_type"] == "EXPENSE"]
+        assert len(rows) >= 1
+        summary = rows[-1]["target_summary"]
+        assert summary["has_receipt"] is True
+        assert summary["receipt_url"] is not None
+
+
 # ====================================================================
 # SHU
 # ====================================================================
@@ -1165,6 +1276,46 @@ class TestReportsHTTP:
         resp = client.get("/api/v1/reports/trial-balance/?as_of=2026-06-30")
         assert resp.status_code == 403
 
+    def test_trial_balance_pdf(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/pdf/?as_of=2026-06-30")
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/pdf"
+        # PDF files start with the magic bytes %PDF
+        assert resp.content[:4] == b"%PDF"
+
+    def test_income_statement_pdf(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(
+            "/api/v1/reports/income-statement/pdf/" "?start=2025-07-01&end=2026-06-30"
+        )
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/pdf"
+        assert resp.content[:4] == b"%PDF"
+
+    def test_balance_sheet_pdf(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/balance-sheet/pdf/?as_of=2026-06-30")
+        assert resp.status_code == 200
+        assert resp.content[:4] == b"%PDF"
+
+    def test_surplus_distribution_pdf(self, db, api_for, board):
+        fy = ShuFiscalYearFactory()
+        client = api_for(board)
+        resp = client.get(f"/api/v1/reports/surplus-distribution/{fy.id}/pdf/")
+        assert resp.status_code == 200
+        assert resp.content[:4] == b"%PDF"
+
+    def test_trial_balance_pdf_requires_as_of(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/pdf/")
+        assert resp.status_code == 400
+
+    def test_maker_cannot_download_pdf(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/reports/trial-balance/pdf/?as_of=2026-06-30")
+        assert resp.status_code == 403
+
 
 # ====================================================================
 # Pipeline
@@ -1278,3 +1429,176 @@ class TestPipelineHTTP:
         assert summary["kind"] == "INITIAL_CAPITAL"
         assert "Initial capital" in summary["label"]
         assert summary["amount"] == "50.00"
+
+
+# ====================================================================
+# Reversal UI
+# ====================================================================
+class TestReversalHTTP:
+    def _make_certified_deposit(self, maker_c, checker_c, certifier_c, maria):
+        """Helper — creates a completed deposit and returns its JE and Transaction IDs."""
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "500.00"},
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+        txn_id = r.data["id"]
+
+        checker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+        certifier_c.post(f"/api/v1/pipeline/{actor_id}/certify/", format="json")
+
+        from savings.models import Transaction
+
+        txn = Transaction.objects.get(id=txn_id)
+        return str(txn.journal_entry_id), txn_id
+
+    def test_create_reversal(self, db, api_for, maker, checker, certifier, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        je_id, txn_id = self._make_certified_deposit(
+            maker_c, checker_c, certifier_c, maria
+        )
+
+        resp = maker_c.post(
+            "/api/v1/ledger/reversals/",
+            {
+                "original_journal_entry": je_id,
+                "source_type": "SAVINGS_TRANSACTION",
+                "source_id": str(txn_id),
+                "reason": "Member reports wrong amount",
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "PENDING_CHECK"
+
+    def test_cannot_reverse_draft_entry(self, db, api_for, maker, maria):
+        from ledger.services import post_journal_entry
+        from decimal import Decimal
+
+        je = post_journal_entry(
+            description="draft",
+            lines=[
+                ("1001", "DEBIT", Decimal("10.00")),
+                ("3101", "CREDIT", Decimal("10.00")),
+            ],
+            created_by=maker,
+        )
+
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/ledger/reversals/",
+            {
+                "original_journal_entry": str(je.id),
+                "source_type": "OTHER",
+                "reason": "test",
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_double_reversal_blocked(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        je_id, txn_id = self._make_certified_deposit(
+            maker_c, checker_c, certifier_c, maria
+        )
+
+        # First reversal
+        r1 = maker_c.post(
+            "/api/v1/ledger/reversals/",
+            {
+                "original_journal_entry": je_id,
+                "source_type": "SAVINGS_TRANSACTION",
+                "source_id": str(txn_id),
+                "reason": "First reversal",
+            },
+            format="json",
+        )
+        assert r1.status_code == 201
+        checker_c.post(
+            f"/api/v1/pipeline/{r1.data['pipeline_actor']}/check/", format="json"
+        )
+        certifier_c.post(
+            f"/api/v1/pipeline/{r1.data['pipeline_actor']}/certify/", format="json"
+        )
+
+        # Second attempt should be blocked
+        r2 = maker_c.post(
+            "/api/v1/ledger/reversals/",
+            {
+                "original_journal_entry": je_id,
+                "source_type": "SAVINGS_TRANSACTION",
+                "source_id": str(txn_id),
+                "reason": "Second attempt",
+            },
+            format="json",
+        )
+        assert r2.status_code == 400
+
+    def test_full_reversal_flow_updates_balances(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        # Deposit 500 → capital goes up 20, voluntary up 480
+        je_id, txn_id = self._make_certified_deposit(
+            maker_c, checker_c, certifier_c, maria
+        )
+
+        maria.refresh_from_db()
+        capital_after_deposit = maria.kapital_sosial_balance
+        voluntary_after_deposit = maria.voluntary_deposit.balance_available
+
+        # Reverse it
+        r = maker_c.post(
+            "/api/v1/ledger/reversals/",
+            {
+                "original_journal_entry": je_id,
+                "source_type": "SAVINGS_TRANSACTION",
+                "source_id": str(txn_id),
+                "reason": "Wrong amount recorded",
+            },
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+
+        checker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+        certifier_c.post(f"/api/v1/pipeline/{actor_id}/certify/", format="json")
+
+        maria.refresh_from_db()
+        # Balances should be back to pre-deposit values
+        assert maria.kapital_sosial_balance == capital_after_deposit - Decimal("20.00")
+        assert (
+            maria.voluntary_deposit.balance_available
+            == voluntary_after_deposit - Decimal("480.00")
+        )
+
+        # The source transaction should now be REVERSED
+        from savings.models import Transaction
+
+        txn = Transaction.objects.get(id=txn_id)
+        assert txn.status == "REVERSED"
+
+    def test_list_reversals(self, db, api_for, maker, board):
+        maker_c = api_for(maker)
+        board_c = api_for(board)
+
+        resp = board_c.get("/api/v1/ledger/reversals/")
+        assert resp.status_code == 200
+        assert isinstance(resp.data, list)
+
+    def test_maker_cannot_read_reversals_of_others(self, db, api_for, maker):
+        """Maker can read the list (they need to track their own)."""
+        client = api_for(maker)
+        resp = client.get("/api/v1/ledger/reversals/")
+        assert resp.status_code == 200

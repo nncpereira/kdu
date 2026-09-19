@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TableSkeleton } from "@/components/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { listExpenses, Expense } from "@/api/expenses";
 import { useAuth } from "@/auth/useAuth";
@@ -8,6 +9,7 @@ import { Badge } from "@/components/Badge";
 import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
 import { RecordExpenseModal } from "./expenses/RecordExpenseModal";
+import { ReverseModal } from "@/components/ReverseModal";
 
 const ACCOUNTS = [
   { code: "", name: "All accounts" },
@@ -21,6 +23,7 @@ export function ExpensesPage() {
   const { profile } = useAuth();
   const [accountFilter, setAccountFilter] = useState("");
   const [recordOpen, setRecordOpen] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState<Expense | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["expenses", { accountFilter }],
@@ -99,7 +102,7 @@ export function ExpensesPage() {
         </div>
 
         {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={5} cols={6} />
         )}
         {isError && (
           <p className="text-sm text-red-600 py-8 text-center">
@@ -114,7 +117,9 @@ export function ExpensesPage() {
               "Description",
               "Account",
               "Amount",
+              "Receipt",
               "Status",
+              "Actions",
             ]}
             empty={rows.length === 0}
           >
@@ -134,7 +139,31 @@ export function ExpensesPage() {
                   ${formatMoney(e.amount)}
                 </td>
                 <td className="py-2 px-2">
+                  {e.receipt_url ? (
+                    <a
+                      href={e.receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand-600 hover:underline text-xs"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="py-2 px-2">
                   <Badge value={e.status} />
+                </td>
+                <td className="py-2 px-2">
+                  {e.status === "COMPLETED" && e.journal_entry && (
+                    <button
+                      onClick={() => setReverseTarget(e)}
+                      className="text-red-600 hover:underline text-xs"
+                    >
+                      Reverse
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -145,6 +174,18 @@ export function ExpensesPage() {
       <RecordExpenseModal
         open={recordOpen}
         onClose={() => setRecordOpen(false)}
+      />
+      <ReverseModal
+        open={!!reverseTarget}
+        onClose={() => setReverseTarget(null)}
+        journalEntryId={reverseTarget?.journal_entry ?? null}
+        sourceType="EXPENSE"
+        sourceId={reverseTarget?.id}
+        description={
+          reverseTarget
+            ? `${reverseTarget.description} · $${reverseTarget.amount}`
+            : undefined
+        }
       />
     </div>
   );

@@ -1,0 +1,105 @@
+{% extends "reports/base.html" %}
+
+{% block content %}
+<table class="summary-grid">
+  <tr>
+    <td class="summary-box">
+      <div class="label">Total Assets</div>
+      <div class="value">{{ total_assets }}</div>
+    </td>
+    <td class="summary-box">
+      <div class="label">Total Liabilities</div>
+      <div class="value">{{ total_liabilities }}</div>
+    </td>
+    <td class="summary-box">
+      <div class="label">Total Equity</div>
+      <div class="value">{{ total_equity }}</div>
+    </td>
+    <td class="summary-box" style="border: none">
+      {% if balanced %}
+        <span class="badge badge-green">Assets = L + E</span>
+      {% else %}
+        <span class="badge badge-red">Unbalanced</span>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<div class="section-title">Assets</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 20%">Code</th>
+      <th style="width: 60%">Account</th>
+      <th class="amount" style="width: 20%">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in assets %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="amount">{{ r.net }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color: #888; font-style: italic">No asset accounts.</td></tr>
+    {% endfor %}
+    <tr class="total-row">
+      <td colspan="2">Total Assets</td>
+      <td class="amount">{{ total_assets }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">Liabilities</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 20%">Code</th>
+      <th style="width: 60%">Account</th>
+      <th class="amount" style="width: 20%">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in liabilities %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="amount">{{ r.liability_amount }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color: #888; font-style: italic">No liability accounts.</td></tr>
+    {% endfor %}
+    <tr class="total-row">
+      <td colspan="2">Total Liabilities</td>
+      <td class="amount">{{ total_liabilities }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">Equity</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 20%">Code</th>
+      <th style="width: 60%">Account</th>
+      <th class="amount" style="width: 20%">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in equity %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="amount">{{ r.equity_amount }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color: #888; font-style: italic">No equity accounts.</td></tr>
+    {% endfor %}
+    <tr class="total-row">
+      <td colspan="2">Total Equity</td>
+      <td class="amount">{{ total_equity }}</td>
+    </tr>
+  </tbody>
+</table>
+{% endblock %}

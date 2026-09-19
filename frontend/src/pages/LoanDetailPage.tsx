@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getLoan, listRepayments } from "@/api/loans";
+import { getLoan, listRepayments, LoanRepayment } from "@/api/loans";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
@@ -10,12 +10,14 @@ import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
 import { ManualRepaymentModal } from "./loans/ManualRepaymentModal";
 import { ScheduledRepaymentModal } from "./loans/ScheduledRepaymentModal";
+import { ReverseModal } from "@/components/ReverseModal";
 
 export function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
   const [manualOpen, setManualOpen] = useState(false);
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState<LoanRepayment | null>(null);
 
   const loanQuery = useQuery({
     queryKey: ["loan", id],
@@ -126,6 +128,7 @@ export function LoanDetailPage() {
               "Interest",
               "Total",
               "Status",
+              "Actions",
             ]}
             empty={repayments.length === 0}
           >
@@ -155,6 +158,16 @@ export function LoanDetailPage() {
                   <td className="py-2 px-2">
                     <Badge value={r.status} />
                   </td>
+                  <td className="py-2 px-2">
+                    {r.status === "COMPLETED" && r.journal_entry && (
+                      <button
+                        onClick={() => setReverseTarget(r)}
+                        className="text-red-600 hover:underline text-xs"
+                      >
+                        Reverse
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -171,6 +184,21 @@ export function LoanDetailPage() {
         loan={loan}
         open={scheduledOpen}
         onClose={() => setScheduledOpen(false)}
+      />
+      <ReverseModal
+        open={!!reverseTarget}
+        onClose={() => setReverseTarget(null)}
+        journalEntryId={reverseTarget?.journal_entry ?? null}
+        sourceType="LOAN_REPAYMENT"
+        sourceId={reverseTarget?.id}
+        description={
+          reverseTarget
+            ? `${reverseTarget.mode} repayment · $${formatMoney(
+                (parseFloat(reverseTarget.principal_paid) +
+                  parseFloat(reverseTarget.interest_paid)).toFixed(2)
+              )}`
+            : undefined
+        }
       />
     </div>
   );

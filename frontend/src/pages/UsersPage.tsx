@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TableSkeleton } from "@/components/Skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listStaff, disableStaff, enableStaff, StaffUser, Role,
@@ -71,7 +72,7 @@ export function UsersPage() {
 
       <Card>
         {isLoading && (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+          <TableSkeleton rows={5} cols={7} />
         )}
         {isError && (
           <p className="text-sm text-red-600 py-8 text-center">

@@ -36,6 +36,7 @@ export interface LoanRepayment {
   payment_date: string;
   mode: RepaymentMode;
   status: RepaymentStatus;
+  journal_entry: string | null;
   created_at: string;
 }
 

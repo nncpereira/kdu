@@ -1,0 +1,42 @@
+{% extends "reports/base.html" %}
+
+{% block content %}
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%">Code</th>
+      <th style="width: 38%">Account</th>
+      <th style="width: 15%">Type</th>
+      <th class="amount" style="width: 11.66%">Debit</th>
+      <th class="amount" style="width: 11.66%">Credit</th>
+      <th class="amount" style="width: 11.66%">Net</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td class="mono">{{ r.account_code }}</td>
+      <td>{{ r.account_name }}</td>
+      <td class="mono">{{ r.account_type }}</td>
+      <td class="amount">{{ r.debit }}</td>
+      <td class="amount">{{ r.credit }}</td>
+      <td class="amount">{{ r.net }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr class="total-row">
+      <td colspan="3">Total</td>
+      <td class="amount">{{ total_debit }}</td>
+      <td class="amount">{{ total_credit }}</td>
+      <td class="amount">
+        {% if balanced %}
+          <span class="badge badge-green">Balanced</span>
+        {% else %}
+          <span class="badge badge-red">Unbalanced</span>
+        {% endif %}
+      </td>
+    </tr>
+  </tfoot>
+</table>
+{% endblock %}

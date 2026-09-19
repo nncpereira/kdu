@@ -12,4 +12,6 @@ def _expense(expense_id):
         "amount": str(e.amount),
         "expense_account_code": e.expense_account_code,
         "description": e.description,
+        "has_receipt": bool(e.receipt),
+        "receipt_url": e.receipt.url if e.receipt else None,
     }

@@ -12,6 +12,64 @@ from reports.services import (
     dashboard_summary,
 )
 
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+
+from reports.pdf import (
+    build_trial_balance_pdf,
+    build_income_statement_pdf,
+    build_balance_sheet_pdf,
+    build_surplus_distribution_pdf,
+)
+
+
+def _pdf_response(pdf_bytes: bytes, filename: str) -> HttpResponse:
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+class TrialBalancePdfView(APIView):
+    permission_classes = [IsBoardOrChecker]
+
+    def get(self, request):
+        as_of = request.query_params.get("as_of")
+        if not as_of:
+            return Response({"detail": "as_of is required."}, status=400)
+        pdf = build_trial_balance_pdf(as_of)
+        return _pdf_response(pdf, f"trial-balance-{as_of}.pdf")
+
+
+class IncomeStatementPdfView(APIView):
+    permission_classes = [IsBoardOrChecker]
+
+    def get(self, request):
+        start = request.query_params.get("start")
+        end = request.query_params.get("end")
+        if not (start and end):
+            return Response({"detail": "start and end are required."}, status=400)
+        pdf = build_income_statement_pdf(start, end)
+        return _pdf_response(pdf, f"income-statement-{start}-{end}.pdf")
+
+
+class BalanceSheetPdfView(APIView):
+    permission_classes = [IsBoardOrChecker]
+
+    def get(self, request):
+        as_of = request.query_params.get("as_of")
+        if not as_of:
+            return Response({"detail": "as_of is required."}, status=400)
+        pdf = build_balance_sheet_pdf(as_of)
+        return _pdf_response(pdf, f"balance-sheet-{as_of}.pdf")
+
+
+class SurplusDistributionPdfView(APIView):
+    permission_classes = [IsBoardOrChecker]
+
+    def get(self, request, fy_id):
+        pdf = build_surplus_distribution_pdf(fy_id)
+        return _pdf_response(pdf, f"shu-{fy_id}.pdf")
+
 
 class TrialBalanceView(APIView):
     permission_classes = [IsBoardOrChecker]

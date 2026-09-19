@@ -6,6 +6,7 @@ import { Input } from "@/components/Input";
 import { withdraw, getVoluntaryBalance } from "@/api/savings";
 import { formatMoney } from "@/lib/format";
 import { MemberPicker } from "./MemberPicker";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -33,6 +34,7 @@ export function WithdrawModal({ open, onClose, presetMemberId }: Props) {
   const mutation = useMutation({
     mutationFn: () => withdraw(memberId, amount),
     onSuccess: () => {
+      toast.success("Withdrawal submitted for approval.");
       qc.invalidateQueries({ queryKey: ["savings"] });
       qc.invalidateQueries({ queryKey: ["members"] });
       qc.invalidateQueries({ queryKey: ["member"] });
@@ -46,8 +48,10 @@ export function WithdrawModal({ open, onClose, presetMemberId }: Props) {
     onError: (err: any) => {
       const detail = err?.response?.data?.detail;
       if (typeof detail === "string" && detail.includes("Insufficient")) {
+        toast.error("Insufficient voluntary balance for this withdrawal.");
         setError("Insufficient voluntary balance for this withdrawal.");
       } else {
+        toast.error(detail ?? "Withdrawal failed.");
         setError(detail ?? "Withdrawal failed.");
       }
     },

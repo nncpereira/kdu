@@ -27,6 +27,7 @@ const COLORS: Record<string, string> = {
   Dormant: "bg-gray-100 text-gray-800",
   Suspended: "bg-orange-100 text-orange-800",
   Disabled: "bg-gray-200 text-gray-600",
+  REVERSED: "bg-gray-200 text-gray-700",
 
 };
 

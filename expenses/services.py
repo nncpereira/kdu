@@ -1,3 +1,4 @@
+import os
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -10,20 +11,46 @@ from pipeline.services import create_pipeline
 
 CASH = "1001"
 
+MAX_RECEIPT_SIZE = 5 * 1024 * 1024  # 5 MB
+ALLOWED_RECEIPT_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _validate_receipt(receipt_file):
+    """Raise ValidationError if the receipt violates size or type limits."""
+    if receipt_file is None:
+        return
+
+    if receipt_file.size > MAX_RECEIPT_SIZE:
+        raise ValidationError(
+            f"Receipt is too large ({receipt_file.size} bytes). "
+            f"Maximum allowed is 5 MB."
+        )
+
+    ext = os.path.splitext(receipt_file.name)[1].lower()
+    if ext not in ALLOWED_RECEIPT_EXTS:
+        raise ValidationError(
+            f"Unsupported receipt format: {ext or 'unknown'}. "
+            f"Allowed: {', '.join(sorted(ALLOWED_RECEIPT_EXTS))}."
+        )
+
 
 @transaction.atomic
 def record_expense(
     *,
     description: str,
-    amount: Decimal,
+    amount,
     expense_account_code: str,
     payment_date=None,
+    receipt=None,
     maker_user,
 ) -> Expense:
     """
-    Record an operating expense. Posts a DRAFT JE:
-        Dr Expense Account, Cr Cash
+    Record an operating expense. Optionally attaches a receipt file.
+    Posts a DRAFT JE: Dr Expense Account, Cr Cash.
     """
+    from accounting.models import Account
+    from core.services import round_money, today
+
     payment_date = payment_date or today()
     amount = round_money(Decimal(str(amount)))
 
@@ -32,7 +59,6 @@ def record_expense(
     if not description:
         raise ValidationError("Description is required.")
 
-    # Validate the account exists and is an expense account
     acct = Account.objects.filter(
         account_code=expense_account_code, status="ACTIVE"
     ).first()
@@ -43,11 +69,14 @@ def record_expense(
             f"Account {expense_account_code} is not an expense account."
         )
 
+    _validate_receipt(receipt)
+
     expense = Expense.objects.create(
         description=description,
         amount=amount,
         expense_account_code=expense_account_code,
         payment_date=payment_date,
+        receipt=receipt,
         status=Expense.Status.PENDING_CHECK,
     )
 
@@ -55,7 +84,7 @@ def record_expense(
         description=f"Expense: {description}",
         lines=[
             (expense_account_code, "DEBIT", amount),
-            (CASH, "CREDIT", amount),
+            ("1001", "CREDIT", amount),
         ],
         created_by=maker_user,
         entry_date=payment_date,

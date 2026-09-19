@@ -1,24 +1,26 @@
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { Input, Select } from "@/components/Input";
 import { recordExpense } from "@/api/expenses";
 import { formatMoney } from "@/lib/format";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-// Standard expense accounts from the CoA seed.
-// In production, load these from /api/v1/admin/coa/ filtered to account_type=EXPENSE.
 const EXPENSE_ACCOUNTS = [
   { code: "5101", name: "AGM Expense" },
   { code: "5102", name: "Salaries Expense" },
   { code: "5103", name: "Utilities Expense" },
   { code: "5104", name: "Office Supplies Expense" },
 ];
+
+const MAX_SIZE = 5 * 1024 * 1024;
+const ALLOWED = ".pdf,.jpg,.jpeg,.png,.webp";
 
 export function RecordExpenseModal({ open, onClose }: Props) {
   const qc = useQueryClient();
@@ -28,15 +30,16 @@ export function RecordExpenseModal({ open, onClose }: Props) {
   const [paymentDate, setPaymentDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [receipt, setReceipt] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form on open
   useEffect(() => {
     if (open) {
       setDescription("");
       setAmount("");
       setAccountCode("5101");
       setPaymentDate(new Date().toISOString().slice(0, 10));
+      setReceipt(null);
       setError(null);
     }
   }, [open]);
@@ -48,8 +51,10 @@ export function RecordExpenseModal({ open, onClose }: Props) {
         amount,
         expense_account_code: accountCode,
         payment_date: paymentDate,
+        receipt,
       }),
     onSuccess: () => {
+      toast.success("Expense submitted for approval.");
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -58,17 +63,32 @@ export function RecordExpenseModal({ open, onClose }: Props) {
     onError: (err: any) => {
       const detail = err?.response?.data?.detail;
       const fieldErr = err?.response?.data?.fields;
-      if (typeof detail === "string") {
-        setError(detail);
-      } else if (fieldErr?.amount) {
-        setError(fieldErr.amount[0]);
-      } else if (fieldErr?.expense_account_code) {
-        setError(fieldErr.expense_account_code[0]);
-      } else {
-        setError("Failed to record expense.");
-      }
+      const message = typeof detail === "string" ? detail : fieldErr?.receipt?.[0] ?? fieldErr?.amount?.[0] ?? "Failed to record expense.";
+      toast.error(message);
+      setError(message);
     },
   });
+
+  function onFileChange(e: ChangeEvent<HTMLInputElement>) {
+    setError(null);
+    const file = e.target.files?.[0] ?? null;
+
+    if (!file) {
+      setReceipt(null);
+      return;
+    }
+
+    if (file.size > MAX_SIZE) {
+      setError(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum 5 MB.`
+      );
+      e.target.value = "";
+      setReceipt(null);
+      return;
+    }
+
+    setReceipt(file);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -118,6 +138,46 @@ export function RecordExpenseModal({ open, onClose }: Props) {
           ))}
         </Select>
 
+        {/* Receipt */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Receipt (optional)
+          </label>
+          <div className="border border-dashed border-gray-300 rounded px-3 py-4 text-sm bg-gray-50">
+            {!receipt ? (
+              <>
+                <input
+                  type="file"
+                  accept={ALLOWED}
+                  onChange={onFileChange}
+                  className="block w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-brand-600 file:text-white hover:file:bg-brand-700 file:cursor-pointer"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  PDF, JPG, PNG, or WEBP. Max 5 MB.
+                </p>
+              </>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {receipt.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {(receipt.size / 1024).toFixed(0)} KB
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReceipt(null)}
+                  className="text-xs text-red-600 hover:underline ml-3"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded p-3">
           <p className="font-medium mb-1">Double-entry posting</p>
           <p>
@@ -125,10 +185,6 @@ export function RecordExpenseModal({ open, onClose }: Props) {
             <span className="font-mono">{accountCode}</span> —{" "}
             {formatMoney(amount || "0")} · Credit{" "}
             <span className="font-mono">1001</span> Cash
-          </p>
-          <p className="mt-1 text-blue-700">
-            The expense is recorded in the ledger only after the
-            Checker and Certifier approve it through the pipeline.
           </p>
         </div>
 

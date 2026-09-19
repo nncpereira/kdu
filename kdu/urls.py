@@ -56,6 +56,7 @@ urlpatterns = [
         "api/v1/savings/", include(("savings.api.urls", "savings"), namespace="savings")
     ),
     path("api/v1/loans/", include(("loans.api.urls", "loans"), namespace="loans")),
+    path("api/v1/ledger/", include(("ledger.api.urls", "ledger"), namespace="ledger")),
     path(
         "api/v1/expenses/",
         include(("expenses.api.urls", "expenses"), namespace="expenses"),

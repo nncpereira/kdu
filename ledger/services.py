@@ -8,7 +8,6 @@ from core.services import round_money
 from ledger.models import JournalEntry, JournalTransactionLine
 from ledger.signals import journal_entry_certified
 
-
 # ====================================================================
 # Exceptions
 # ====================================================================
@@ -150,6 +149,14 @@ def post_journal_entry(
             for d in normalised
         ]
     )
+
+    # If we're auto-certifying, emit the signal so cached balances update.
+    if auto_certify:
+        journal_entry_certified.send(
+            sender=JournalEntry,
+            journal_entry=entry,
+            certified_by=certified_by,
+        )
 
     return entry
 

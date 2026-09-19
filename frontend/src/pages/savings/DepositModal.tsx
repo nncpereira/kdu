@@ -6,6 +6,7 @@ import { Input } from "@/components/Input";
 import { deposit } from "@/api/savings";
 import { formatMoney } from "@/lib/format";
 import { MemberPicker } from "./MemberPicker";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -22,6 +23,7 @@ export function DepositModal({ open, onClose, presetMemberId }: Props) {
   const mutation = useMutation({
     mutationFn: () => deposit(memberId, amount),
     onSuccess: () => {
+      toast.success("Deposit submitted for approval.");
       qc.invalidateQueries({ queryKey: ["savings"] });
       qc.invalidateQueries({ queryKey: ["members"] });
       qc.invalidateQueries({ queryKey: ["member"] });
@@ -33,11 +35,9 @@ export function DepositModal({ open, onClose, presetMemberId }: Props) {
       onClose();
     },
     onError: (err: any) => {
-      setError(
-        err?.response?.data?.detail ??
-          err?.response?.data?.fields?.amount?.[0] ??
-          "Deposit failed."
-      );
+      const detail = err?.response?.data?.detail ?? err?.response?.data?.fields?.amount?.[0] ?? "Deposit failed.";
+      toast.error(detail);
+      setError(detail);
     },
   });
 

@@ -11,6 +11,7 @@ import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
+import { toast } from "sonner";
 
 export function ShuDetailPage() {
   const { fyId } = useParams<{ fyId: string }>();
@@ -56,6 +57,7 @@ export function ShuDetailPage() {
   const calcMutation = useMutation({
     mutationFn: () => calculateShu(fyId!),
     onSuccess: (calc) => {
+      toast.success("SHU calculation created.");
       setPendingCalcId(calc.id);
       setCalcError(null);
       setFeedback("SHU calculation created. Awaiting Checker approval.");
@@ -64,6 +66,7 @@ export function ShuDetailPage() {
     },
     onError: (err: any) => {
       const detail = err?.response?.data?.detail ?? "Calculation failed.";
+      toast.error(detail);
       setCalcError(detail);
     },
   });
@@ -71,6 +74,7 @@ export function ShuDetailPage() {
   const backfillMutation = useMutation({
     mutationFn: () => backfillSnapshots(fyId!),
     onSuccess: (r) => {
+      toast.success(`Backfilled ${r.rows_created} monthly snapshots.`);
       setFeedback(`Backfilled ${r.rows_created} monthly snapshots.`);
     },
   });
@@ -78,6 +82,7 @@ export function ShuDetailPage() {
   const aggregateMutation = useMutation({
     mutationFn: () => runAggregation(fyId!),
     onSuccess: (r) => {
+      toast.success(`Aggregated ${r.rows_created} member weighting rows.`);
       setFeedback(`Aggregated ${r.rows_created} member weighting rows.`);
     },
   });
@@ -85,6 +90,7 @@ export function ShuDetailPage() {
   const cancelMutation = useMutation({
     mutationFn: () => cancelCalculation(calcId!),
     onSuccess: (calc) => {
+      toast.success("SHU calculation cancelled.");
       setFeedback("SHU calculation cancelled.");
       setCalcError(null);
       qc.setQueryData(["shu", "calc", calc.id], calc);

@@ -110,3 +110,59 @@ class JournalTransactionLine(models.Model):
 
     def __str__(self):
         return f"{self.entry_type} {self.account_code} {self.amount}"
+
+
+class ReversalRequest(UUIDTimeStampedModel):
+    """
+    Tracks a request to reverse a certified journal entry.
+    The original entry is never modified; an offsetting entry is posted
+    once the pipeline completes.
+    """
+
+    class Status(models.TextChoices):
+        PENDING_CHECK = "PENDING_CHECK", "Pending Check"
+        PENDING_CERTIFY = "PENDING_CERTIFY", "Pending Certify"
+        COMPLETED = "COMPLETED", "Completed"
+        REJECTED = "REJECTED", "Rejected"
+
+    class SourceType(models.TextChoices):
+        SAVINGS_TRANSACTION = "SAVINGS_TRANSACTION", "Savings Transaction"
+        LOAN_REPAYMENT = "LOAN_REPAYMENT", "Loan Repayment"
+        EXPENSE = "EXPENSE", "Expense"
+        OTHER = "OTHER", "Other"
+
+    original_journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.PROTECT,
+        related_name="reversal_requests",
+    )
+    reversal_journal_entry = models.ForeignKey(
+        JournalEntry,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="reversed_from",
+    )
+    source_type = models.CharField(max_length=30, choices=SourceType.choices)
+    source_id = models.UUIDField(null=True, blank=True)
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING_CHECK
+    )
+    pipeline_actor = models.ForeignKey(
+        "pipeline.TransactionPipelineActor",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reversal_requests",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["original_journal_entry"]),
+        ]
+
+    def __str__(self):
+        return f"Reversal of {self.original_journal_entry_id} [{self.status}]"

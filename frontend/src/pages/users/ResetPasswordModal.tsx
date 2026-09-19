@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { resetStaffPassword, StaffUser } from "@/api/users";
+import { toast } from "sonner";
 
 interface Props {
   user: StaffUser | null;
@@ -18,7 +19,11 @@ export function ResetPasswordModal({ user, open, onClose }: Props) {
   const mutation = useMutation({
     mutationFn: () => resetStaffPassword(user!.id),
     onSuccess: (data) => {
+      toast.success("Temporary password generated.");
       setResult({ temporary_password: data.temporary_password });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail ?? "Failed to reset password.");
     },
   });
 
