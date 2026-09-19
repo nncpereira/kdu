@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsMaker, IsBoardOrChecker
+from core.permissions import IsMaker, IsStaffReadLoans
 from loans.api.serializers import (
     LoanSerializer,
     LoanOriginateSerializer,
@@ -14,20 +14,23 @@ from loans.api.serializers import (
 from loans.models import Loan, LoanRepayment
 from loans.services import originate_loan, repay_manual, repay_scheduled
 from members.models import Member
+from core.pagination import StandardPagination
 
 
 class LoanListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsMaker()]
-        return [IsBoardOrChecker()]
+        return [IsStaffReadLoans()]
 
     def get(self, request):
         qs = Loan.objects.select_related("member").order_by("-created_at")
         member_id = request.query_params.get("member")
         if member_id:
             qs = qs.filter(member_id=member_id)
-        return Response(LoanSerializer(qs[:200], many=True).data)
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        return paginator.get_paginated_response(LoanSerializer(page, many=True).data)
 
     def post(self, request):
         serializer = LoanOriginateSerializer(data=request.data)
@@ -42,7 +45,7 @@ class LoanListCreateView(APIView):
 
 
 class LoanDetailView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadLoans]
 
     def get(self, request, pk):
         loan = get_object_or_404(Loan, pk=pk)
@@ -84,7 +87,7 @@ class ScheduledRepaymentView(APIView):
 
 
 class RepaymentListView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadLoans]
 
     def get(self, request, pk):
         qs = LoanRepayment.objects.filter(loan_id=pk).order_by("-payment_date")

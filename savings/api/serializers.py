@@ -44,6 +44,8 @@ class WithdrawRequestSerializer(serializers.Serializer):
 
 
 class VoluntaryDepositSerializer(serializers.ModelSerializer):
+    updated_at = serializers.DateTimeField(allow_null=True, required=False)
+    
     class Meta:
         model = MemberVoluntaryDeposit
         fields = ["member", "balance_available", "balance_held_pipeline", "updated_at"]

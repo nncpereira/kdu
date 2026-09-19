@@ -8,3 +8,4 @@ class SavingsConfig(AppConfig):
     def ready(self):
         # Import handlers so their @register decorators run.
         from savings import handlers
+        from savings import summaries

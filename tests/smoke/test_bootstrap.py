@@ -40,6 +40,8 @@ def test_coa_seeded(db):
 
 def test_governance_seeded(db):
     from governance.services import get_active_value
-
-    assert get_active_value("shu_split") is not None
-    assert get_active_value("obligatory_savings_monthly_cap") is not None
+    split = get_active_value("shu_split")
+    assert split is not None
+    # Art. 69: default must be legal (>= 25% reserva legal)
+    assert split["reserva_legal_pct"] >= 25
+    assert sum(split.values()) == 100

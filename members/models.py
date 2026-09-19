@@ -120,6 +120,7 @@ class MemberOnboarding(UUIDTimeStampedModel):
     )
     pipeline_actor = models.ForeignKey(
         "pipeline.TransactionPipelineActor",
+        null=True, blank=True,
         on_delete=models.PROTECT,
         related_name="member_onboardings",
     )
@@ -154,6 +155,7 @@ class MemberExitRequest(UUIDTimeStampedModel):
     )
     pipeline_actor = models.ForeignKey(
         "pipeline.TransactionPipelineActor",
+        null=True, blank=True,
         on_delete=models.PROTECT,
         related_name="member_exits",
     )

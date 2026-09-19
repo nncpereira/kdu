@@ -1,0 +1,1280 @@
+"""
+HTTP integration tests for the KDU API.
+
+Verifies:
+    - JWT auth flow (obtain / refresh / verify)
+    - Role-based permission enforcement (Maker / Checker / Certifier / Board)
+    - Full Maker-Checker-Certifier pipeline over HTTP
+    - Serializer shapes and error responses
+    - Endpoint routing for every app
+
+Run with:
+    pytest tests/integration/test_http_endpoints.py -v
+
+Run a single class:
+    pytest tests/integration/test_http_endpoints.py::TestSavingsHTTP -v
+"""
+
+from decimal import Decimal
+
+import pytest
+from rest_framework.test import APIClient
+
+from conftest import checker, maker
+from expenses.models import Expense
+from governance.models import GlobalConfig, GlobalConfigChange
+from loans.models import Loan, LoanRepayment
+from members.models import Member
+from shu.models import ShuCalculation, ShuFiscalYear, ShuWeightingBase
+from tests.factories import ShuFiscalYearFactory, ShuWeightingBaseFactory
+
+pytestmark = [pytest.mark.integration, pytest.mark.http]
+
+
+# ====================================================================
+# Helpers
+# ====================================================================
+def _get_jwt(client: APIClient, username: str, password: str = "testpass123") -> str:
+    resp = client.post(
+        "/api/v1/auth/token/",
+        {"username": username, "password": password},
+        format="json",
+    )
+    assert resp.status_code == 200, f"JWT obtain failed: {resp.content}"
+    return resp.data["access"]
+
+
+@pytest.fixture
+def api_for(db):
+    """
+    Factory fixture.
+    Usage:  client = api_for(maker)
+            resp = client.get("/api/v1/...")
+    """
+
+    def _make(profile):
+        client = APIClient()
+        token = _get_jwt(client, profile.user.username)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        return client
+
+    return _make
+
+
+def _run_pipeline(checker_client, certifier_client, actor_id):
+    """Run check + certify via HTTP and assert both succeed."""
+    r1 = checker_client.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+    assert r1.status_code == 200, f"Check failed: {r1.content}"
+
+    r2 = certifier_client.post(f"/api/v1/pipeline/{actor_id}/certify/", format="json")
+    assert r2.status_code == 200, f"Certify failed: {r2.content}"
+
+
+# ====================================================================
+# Health
+# ====================================================================
+class TestHealth:
+    def test_health_ok(self, db):
+        client = APIClient()
+        resp = client.get("/health/")
+        assert resp.status_code == 200
+        assert resp.data["status"] == "ok"
+        assert resp.data["database"] == "ok"
+
+
+# ====================================================================
+# Auth
+# ====================================================================
+class TestAuthHTTP:
+    def test_obtain_token_success(self, db, maker):
+        client = APIClient()
+        resp = client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "testpass123"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert "access" in resp.data
+        assert "refresh" in resp.data
+
+    def test_obtain_token_bad_password(self, db, maker):
+        client = APIClient()
+        resp = client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "wrong"},
+            format="json",
+        )
+        assert resp.status_code == 401
+
+    def test_refresh_token(self, db, maker):
+        client = APIClient()
+        r1 = client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "testpass123"},
+            format="json",
+        )
+        refresh = r1.data["refresh"]
+
+        r2 = client.post(
+            "/api/v1/auth/token/refresh/",
+            {"refresh": refresh},
+            format="json",
+        )
+        assert r2.status_code == 200
+        assert "access" in r2.data
+
+    def test_verify_token(self, db, maker):
+        client = APIClient()
+        r1 = client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "testpass123"},
+            format="json",
+        )
+        access = r1.data["access"]
+
+        r2 = client.post(
+            "/api/v1/auth/token/verify/",
+            {"token": access},
+            format="json",
+        )
+        assert r2.status_code == 200
+
+    def test_unauthenticated_returns_401(self, db):
+        client = APIClient()
+        resp = client.get("/api/v1/users/me/")
+        assert resp.status_code == 401
+
+
+# ====================================================================
+# Users / me
+# ====================================================================
+class TestUsersHTTP:
+    def test_get_me(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/users/me/")
+        assert resp.status_code == 200
+        assert resp.data["username"] == maker.user.username
+        assert resp.data["role"] == "MAKER"
+        assert resp.data["must_change_password"] is False
+
+    def test_change_password_success(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/users/me/change-password/",
+            {"old_password": "testpass123", "new_password": "NewPass!2026"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert "detail" in resp.data
+
+    def test_change_password_wrong_old(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/users/me/change-password/",
+            {"old_password": "nope", "new_password": "NewPass!2026"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_update_my_profile(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.patch(
+            "/api/v1/users/me/",
+            {
+                "first_name": "NewFirst",
+                "last_name": "NewLast",
+                "email": "newmaker@example.com",
+            },
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.data["first_name"] == "NewFirst"
+        assert resp.data["last_name"] == "NewLast"
+        assert resp.data["email"] == "newmaker@example.com"
+
+        # Confirm it persisted
+        r2 = client.get("/api/v1/users/me/")
+        assert r2.data["first_name"] == "NewFirst"
+
+    def test_update_my_profile_partial(self, db, api_for, maker):
+        """Only send the fields you want to change."""
+        client = api_for(maker)
+        resp = client.patch(
+            "/api/v1/users/me/",
+            {"first_name": "OnlyFirst"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["first_name"] == "OnlyFirst"
+
+    def test_cannot_change_role_via_profile(self, db, api_for, maker):
+        """Role is read-only on the self endpoint."""
+        client = api_for(maker)
+        resp = client.patch(
+            "/api/v1/users/me/",
+            {"role": "SUPERADMIN"},
+            format="json",
+        )
+        # Ignored silently — role remains MAKER
+        assert resp.status_code == 200
+        assert resp.data["role"] == "MAKER"
+
+
+class TestUsersAdminHTTP:
+    def test_superadmin_lists_staff(self, db, api_for, superadmin, maker, checker):
+        client = api_for(superadmin)
+        resp = client.get("/api/v1/users/")
+        assert resp.status_code == 200
+        usernames = {u["username"] for u in resp.data}
+        assert maker.user.username in usernames
+        assert checker.user.username in usernames
+
+    def test_maker_cannot_list_staff(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/users/")
+        assert resp.status_code == 403
+
+    def test_checker_cannot_list_staff(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get("/api/v1/users/")
+        assert resp.status_code == 403
+
+    def test_superadmin_creates_staff(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/users/",
+            {
+                "username": "newmaker",
+                "password": "FreshPass2026!",
+                "role": "MAKER",
+                "email": "newmaker@example.com",
+                "first_name": "New",
+                "last_name": "Maker",
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["username"] == "newmaker"
+        assert resp.data["role"] == "MAKER"
+        assert resp.data["must_change_password"] is True
+
+    def test_cannot_create_duplicate_username(self, db, api_for, superadmin, maker):
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/users/",
+            {
+                "username": maker.user.username,
+                "password": "FreshPass2026!",
+                "role": "MAKER",
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_cannot_create_member_role_via_admin(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/users/",
+            {
+                "username": "badmember",
+                "password": "FreshPass2026!",
+                "role": "MEMBER",
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_superadmin_disables_staff(self, db, api_for, superadmin, maker):
+        client = api_for(superadmin)
+        resp = client.post(f"/api/v1/users/{maker.id}/disable/", format="json")
+        assert resp.status_code == 200
+        assert resp.data["is_active"] is False
+
+    def test_cannot_disable_self(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        resp = client.post(f"/api/v1/users/{superadmin.id}/disable/", format="json")
+        assert resp.status_code == 400
+
+    def test_superadmin_resets_password(self, db, api_for, superadmin, maker):
+        client = api_for(superadmin)
+        resp = client.post(f"/api/v1/users/{maker.id}/reset-password/", format="json")
+        assert resp.status_code == 200
+        assert "temporary_password" in resp.data
+        assert len(resp.data["temporary_password"]) > 0
+
+    def test_update_staff_name(self, db, api_for, superadmin, maker):
+        client = api_for(superadmin)
+        resp = client.patch(
+            f"/api/v1/users/{maker.id}/",
+            {"first_name": "Renamed", "last_name": "Person"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["first_name"] == "Renamed"
+        assert resp.data["last_name"] == "Person"
+
+
+# ====================================================================
+# Permission enforcement
+# ====================================================================
+class TestPermissionsHTTP:
+
+    def test_maker_can_list_members(self, db, api_for, maker):
+        """Teller (MAKER) needs to see member records to process deposits
+        and to navigate to a member to pay initial capital."""
+        client = api_for(maker)
+        resp = client.get("/api/v1/members/")
+        assert resp.status_code == 200
+
+    def test_maker_can_view_member_detail(self, db, api_for, maker, maria):
+        client = api_for(maker)
+        resp = client.get(f"/api/v1/members/{maria.id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == str(maria.id)
+
+    def test_checker_can_list_members(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get("/api/v1/members/")
+        assert resp.status_code == 200
+
+    def test_board_can_list_members(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/members/")
+        assert resp.status_code == 200
+
+    def test_maker_cannot_check_pipeline(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/pipeline/pending-check/")
+        assert resp.status_code == 403
+
+    def test_checker_cannot_access_certify_queue(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get("/api/v1/pipeline/pending-certify/")
+        assert resp.status_code == 403
+
+    def test_certifier_can_access_certify_queue(self, db, api_for, certifier):
+        client = api_for(certifier)
+        resp = client.get("/api/v1/pipeline/pending-certify/")
+        assert resp.status_code == 200
+
+    def test_superadmin_can_access_both_queues(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        r1 = client.get("/api/v1/pipeline/pending-check/")
+        r2 = client.get("/api/v1/pipeline/pending-certify/")
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+
+# ====================================================================
+# Members
+# ====================================================================
+class TestMembersHTTP:
+    def test_maker_can_create_member(self, db, api_for, maker):
+        client = api_for(maker)
+        payload = {
+            "first_name": "Test",
+            "last_name": "User",
+            "salutation": "Mr",
+            "phone_number": "77000111",
+            "date_of_birth": "1985-06-15",
+            "aldeia": "A",
+            "suco": "S",
+            "posto": "P",
+            "municipio": "Dili",
+            "profession": "Farmer",
+        }
+        resp = client.post("/api/v1/members/", payload, format="json")
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "Pending"
+        assert resp.data["kapital_sosial_balance"] == "0.00"
+        assert resp.data["membership_number"].startswith("KDU-")
+
+    def test_list_members_paginated(self, db, api_for, checker, maria):
+        client = api_for(checker)
+        resp = client.get("/api/v1/members/")
+        assert resp.status_code == 200
+        assert "count" in resp.data
+        assert "results" in resp.data
+        assert resp.data["count"] >= 1
+
+    def test_filter_members_by_status(self, db, api_for, checker, maria):
+        client = api_for(checker)
+        resp = client.get("/api/v1/members/?status=Active")
+        assert resp.status_code == 200
+        for member in resp.data["results"]:
+            assert member["status"] == "Active"
+
+    def test_get_member_detail(self, db, api_for, checker, maria):
+        client = api_for(checker)
+        resp = client.get(f"/api/v1/members/{maria.id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == str(maria.id)
+
+    def test_get_member_404(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get("/api/v1/members/00000000-0000-0000-0000-000000000000/")
+        assert resp.status_code == 404
+
+    def test_pay_initial_capital_below_minimum(self, db, api_for, maker):
+        client = api_for(maker)
+        # Create a fresh pending member
+        r = client.post(
+            "/api/v1/members/",
+            {
+                "first_name": "Low",
+                "last_name": "Cap",
+                "phone_number": "77000222",
+                "date_of_birth": "1990-01-01",
+            },
+            format="json",
+        )
+        member_id = r.data["id"]
+
+        resp = client.post(
+            f"/api/v1/members/{member_id}/initial-capital/",
+            {"amount": "40.00"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_pay_initial_capital_and_run_pipeline(
+        self, db, api_for, maker, checker, certifier
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/members/",
+            {
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "phone_number": "77000333",
+                "date_of_birth": "1990-01-01",
+            },
+            format="json",
+        )
+        member_id = r.data["id"]
+
+        r2 = maker_c.post(
+            f"/api/v1/members/{member_id}/initial-capital/",
+            {"amount": "50.00"},
+            format="json",
+        )
+        assert r2.status_code == 201, r2.content
+        actor_id = r2.data["pipeline_actor_id"]
+
+        _run_pipeline(checker_c, certifier_c, actor_id)
+
+        # Verify the member was activated
+        m = Member.objects.get(id=member_id)
+        assert m.status == "Active"
+        assert m.kapital_sosial_balance == Decimal("50.00")
+
+
+# ====================================================================
+# Savings
+# ====================================================================
+class TestSavingsHTTP:
+    def test_deposit_full_flow(self, db, api_for, maker, checker, certifier, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        resp = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "1000.00"},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["obligatory_portion"] == "20.00"
+        assert resp.data["voluntary_portion"] == "980.00"
+        assert resp.data["status"] == "PENDING_CHECK"
+
+        _run_pipeline(checker_c, certifier_c, resp.data["pipeline_actor"])
+
+        maria.refresh_from_db()
+        assert maria.kapital_sosial_balance == Decimal("70.00")
+        assert maria.voluntary_deposit.balance_available == Decimal("980.00")
+
+    def test_withdraw_full_flow(self, db, api_for, maker, checker, certifier, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        # Fund first — first deposit of month splits 20 / 480
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "500.00"},
+            format="json",
+        )
+        assert r.status_code == 201
+        assert r.data["obligatory_portion"] == "20.00"
+        assert r.data["voluntary_portion"] == "480.00"
+        _run_pipeline(checker_c, certifier_c, r.data["pipeline_actor"])
+
+        # Verify voluntary balance after deposit
+        maria.refresh_from_db()
+        assert maria.voluntary_deposit.balance_available == Decimal("480.00")
+
+        # Now withdraw
+        w = maker_c.post(
+            "/api/v1/savings/withdraw/",
+            {"member": str(maria.id), "amount": "200.00"},
+            format="json",
+        )
+        assert w.status_code == 201, w.content
+
+        _run_pipeline(checker_c, certifier_c, w.data["pipeline_actor"])
+
+        maria.refresh_from_db()
+        # Deposit: 500 = 20 obligatory + 480 voluntary (first deposit of month)
+        # Withdraw 200 from voluntary → 280 remains
+        assert maria.voluntary_deposit.balance_available == Decimal("280.00")
+        assert maria.voluntary_deposit.balance_held_pipeline == Decimal("0.00")
+
+    def test_withdraw_insufficient_funds(self, db, api_for, maker, maria):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/savings/withdraw/",
+            {"member": str(maria.id), "amount": "5000.00"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_list_transactions(
+        self, db, api_for, board, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        _run_pipeline(checker_c, certifier_c, r.data["pipeline_actor"])
+
+        board_c = api_for(board)
+        resp = board_c.get("/api/v1/savings/transactions/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+
+    def test_get_voluntary_balance(self, db, api_for, board, maria):
+        # Ensure a voluntary row exists
+        from savings.models import MemberVoluntaryDeposit
+
+        MemberVoluntaryDeposit.objects.get_or_create(member=maria)
+
+        client = api_for(board)
+        resp = client.get(f"/api/v1/savings/members/{maria.id}/voluntary/")
+        assert resp.status_code == 200
+        assert "balance_available" in resp.data
+        assert "balance_held_pipeline" in resp.data
+
+    def test_voluntary_balance_returns_zeros_when_no_row(self, db, api_for, board):
+        from members.models import Member
+
+        m = Member.objects.create(
+            first_name="Fresh",
+            last_name="Member",
+            phone_number="77000999",
+            date_of_birth="1990-01-01",
+            status="Pending",
+        )
+        client = api_for(board)
+        resp = client.get(f"/api/v1/savings/members/{m.id}/voluntary/")
+        assert resp.status_code == 200
+        assert resp.data["balance_available"] == "0.00"
+        assert resp.data["balance_held_pipeline"] == "0.00"
+
+    def test_maker_can_list_transactions(self, db, api_for, maker):
+        """Teller needs to look up member savings history."""
+        client = api_for(maker)
+        resp = client.get("/api/v1/savings/transactions/")
+        assert resp.status_code == 200
+
+    def test_certifier_can_list_transactions(self, db, api_for, certifier):
+        client = api_for(certifier)
+        resp = client.get("/api/v1/savings/transactions/")
+        assert resp.status_code == 200
+
+
+# ====================================================================
+# Loans
+# ====================================================================
+class TestLoansHTTP:
+    def _disburse(self, maker_c, checker_c, certifier_c, maria):
+        r = maker_c.post(
+            "/api/v1/loans/",
+            {
+                "member": str(maria.id),
+                "principal": "9000.00",
+                "term_months": 12,
+                "monthly_rate": "0.0200",
+                "purpose": "working capital",
+            },
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+        loan_id = r.data["id"]
+
+        loan = Loan.objects.get(id=loan_id)
+        actor_id = str(loan.pipeline_actor_id)
+        _run_pipeline(checker_c, certifier_c, actor_id)
+        return loan_id
+
+    def test_originate_and_disburse(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        loan = Loan.objects.get(id=loan_id)
+        assert loan.status == "DISBURSED"
+        assert loan.principal_outstanding == Decimal("9000.00")
+
+    def test_list_loans(self, db, api_for, board, maker, checker, certifier, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+        self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        board_c = api_for(board)
+        resp = board_c.get("/api/v1/loans/")
+        assert resp.status_code == 200
+        assert resp.data["count"] >= 1
+
+    def test_manual_repayment_full_flow(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        r = maker_c.post(
+            f"/api/v1/loans/{loan_id}/repay/manual/",
+            {"principal_paid": "500.00", "interest_paid": "90.00"},
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+        repayment_id = r.data["id"]
+
+        repayment = LoanRepayment.objects.get(id=repayment_id)
+        _run_pipeline(checker_c, certifier_c, str(repayment.pipeline_actor_id))
+
+        loan = Loan.objects.get(id=loan_id)
+        assert loan.principal_outstanding == Decimal("8500.00")
+
+    def test_scheduled_repayment_waterfall(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        r = maker_c.post(
+            f"/api/v1/loans/{loan_id}/repay/scheduled/",
+            {"cash_amount": "1000.00", "scheduled_principal": "700.00"},
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+        repayment_id = r.data["id"]
+
+        repayment = LoanRepayment.objects.get(id=repayment_id)
+        _run_pipeline(checker_c, certifier_c, str(repayment.pipeline_actor_id))
+
+        loan = Loan.objects.get(id=loan_id)
+        # 9000 - 700 = 8300
+        assert loan.principal_outstanding == Decimal("8300.00")
+
+    def test_scheduled_insufficient_for_interest(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        r = maker_c.post(
+            f"/api/v1/loans/{loan_id}/repay/scheduled/",
+            {"cash_amount": "50.00", "scheduled_principal": "700.00"},
+            format="json",
+        )
+        # Interest due = 180.00 so 50 < 180 → rejected
+        assert r.status_code == 400
+
+    def test_list_repayments(
+        self, db, api_for, maker, checker, certifier, board, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        # Make a repayment
+        r = maker_c.post(
+            f"/api/v1/loans/{loan_id}/repay/manual/",
+            {"principal_paid": "100.00", "interest_paid": "50.00"},
+            format="json",
+        )
+        repayment = LoanRepayment.objects.get(id=r.data["id"])
+        _run_pipeline(checker_c, certifier_c, str(repayment.pipeline_actor_id))
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/loans/{loan_id}/repayments/")
+        assert resp.status_code == 200
+        assert len(resp.data) == 1
+
+    def test_maker_can_list_loans(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/loans/")
+        assert resp.status_code == 200
+
+    def test_certifier_can_list_loans(self, db, api_for, certifier):
+        client = api_for(certifier)
+        resp = client.get("/api/v1/loans/")
+        assert resp.status_code == 200
+
+    def test_maker_can_view_loan_detail(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        loan_id = self._disburse(maker_c, checker_c, certifier_c, maria)
+        resp = maker_c.get(f"/api/v1/loans/{loan_id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == loan_id
+
+
+# ====================================================================
+# Expenses
+# ====================================================================
+class TestExpensesHTTP:
+    def test_record_and_list(self, db, api_for, maker, checker, certifier, board):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/expenses/",
+            {
+                "description": "AGM venue",
+                "amount": "500.00",
+                "expense_account_code": "5101",
+                "payment_date": "2026-06-30",
+            },
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+
+        expense = Expense.objects.get(id=r.data["id"])
+        _run_pipeline(checker_c, certifier_c, str(expense.pipeline_actor_id))
+
+        board_c = api_for(board)
+        resp = board_c.get("/api/v1/expenses/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+
+    def test_non_expense_account_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/expenses/",
+            {
+                "description": "bad",
+                "amount": "100.00",
+                "expense_account_code": "1001",  # Asset
+                "payment_date": "2026-06-30",
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_expense_detail(self, db, api_for, maker, board):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/expenses/",
+            {
+                "description": "Utilities",
+                "amount": "150.00",
+                "expense_account_code": "5103",
+                "payment_date": "2026-06-30",
+            },
+            format="json",
+        )
+        expense_id = r.data["id"]
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/expenses/{expense_id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == expense_id
+
+    def test_maker_can_list_expenses(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/expenses/")
+        assert resp.status_code == 200
+
+    def test_certifier_can_list_expenses(self, db, api_for, certifier):
+        client = api_for(certifier)
+        resp = client.get("/api/v1/expenses/")
+        assert resp.status_code == 200
+
+
+# ====================================================================
+# SHU
+# ====================================================================
+class TestShuHTTP:
+    def _seed_fy(self, maria):
+        fy = ShuFiscalYearFactory()
+        ShuWeightingBaseFactory(
+            fy=fy,
+            member=maria,
+            sum_weighted_balance=Decimal("780000.00"),
+            months_active=12,
+            weighted_savings_units=Decimal("65000.00"),
+            loan_interest_paid=Decimal("600.00"),
+        )
+        return fy
+
+    def test_calculate_shu(self, db, api_for, maker, maria):
+        fy = self._seed_fy(maria)
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/shu/calculate/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "PENDING_CHECK"
+        assert resp.data["reserva_legal_amt"] == "13046.12"
+        assert resp.data["admin_fund_amt"] == "39138.36"
+        assert resp.data["jasa_simpanan_amt"] == "32615.30"
+        assert resp.data["jasa_bunga_amt"] == "45661.42"
+
+    def test_shu_detail(self, db, api_for, maker, board, maria):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/shu/{calc_id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == calc_id
+
+    def test_shu_full_payout_flow(self, db, api_for, maker, checker, certifier, maria):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        assert r.status_code == 201, r.content
+        calc_id = r.data["id"]
+
+        calc = ShuCalculation.objects.get(id=calc_id)
+        actor_id = str(calc.pipeline_actor_id)
+
+        _run_pipeline(checker_c, certifier_c, actor_id)
+
+        calc.refresh_from_db()
+        assert calc.status == "PAYOUT_COMPLETE"
+
+        fy.refresh_from_db()
+        assert fy.status == "CLOSED"
+
+    def test_shu_payouts_list(self, db, api_for, maker, board, maria):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        # Compute payouts via check step
+        from shu.services.calculation import compute_member_payouts
+
+        calc = ShuCalculation.objects.get(id=calc_id)
+        compute_member_payouts(calc)
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/shu/{calc_id}/payouts/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+        assert "net_payout" in resp.data[0]
+
+    def test_list_fiscal_years(self, db, api_for, checker):
+        ShuFiscalYearFactory()
+        client = api_for(checker)
+        resp = client.get("/api/v1/shu/fiscal-years/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+
+    def test_superadmin_creates_fiscal_year(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/shu/fiscal-years/",
+            {"year_start": "2025-07-01", "year_end": "2026-06-30"},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "OPEN"
+
+    def test_maker_cannot_create_fiscal_year(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/shu/fiscal-years/",
+            {"year_start": "2025-07-01", "year_end": "2026-06-30"},
+            format="json",
+        )
+        assert resp.status_code == 403
+
+    def test_superadmin_backfills_snapshots(self, db, api_for, superadmin, maria):
+        fy = ShuFiscalYearFactory()
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/shu/backfill/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert "rows_created" in resp.data
+
+    def test_maker_can_list_fiscal_years(self, db, api_for, maker):
+        ShuFiscalYearFactory()
+        client = api_for(maker)
+        resp = client.get("/api/v1/shu/fiscal-years/")
+        assert resp.status_code == 200
+
+    def test_certifier_can_list_fiscal_years(self, db, api_for, certifier):
+        ShuFiscalYearFactory()
+        client = api_for(certifier)
+        resp = client.get("/api/v1/shu/fiscal-years/")
+        assert resp.status_code == 200
+
+    def test_maker_can_view_fiscal_year_detail(self, db, api_for, maker):
+        fy = ShuFiscalYearFactory()
+        client = api_for(maker)
+        resp = client.get(f"/api/v1/shu/fiscal-years/{fy.id}/")
+        assert resp.status_code == 200
+
+    def test_superadmin_can_calculate_shu(self, db, api_for, superadmin, maria):
+        fy = self._seed_fy(maria)
+        client = api_for(superadmin)
+        resp = client.post(
+            "/api/v1/shu/calculate/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "PENDING_CHECK"
+
+    def test_maker_can_view_own_calculation(self, db, api_for, maker, maria):
+        fy = self._seed_fy(maria)
+        client = api_for(maker)
+        r = client.post(
+            "/api/v1/shu/calculate/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        calc_id = r.data["id"]
+
+        # Maker can now view the calculation they just created
+        resp = client.get(f"/api/v1/shu/{calc_id}/")
+        assert resp.status_code == 200
+        assert resp.data["id"] == calc_id
+
+    def test_maker_can_view_payouts(self, db, api_for, maker, maria):
+        from shu.services.calculation import compute_member_payouts
+
+        fy = self._seed_fy(maria)
+        client = api_for(maker)
+        r = client.post(
+            "/api/v1/shu/calculate/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        calc = ShuCalculation.objects.get(id=r.data["id"])
+        compute_member_payouts(calc)
+
+        resp = client.get(f"/api/v1/shu/{calc.id}/payouts/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+
+    def test_fetch_calculation_by_fy(self, db, api_for, maker, maria):
+        fy = self._seed_fy(maria)
+        client = api_for(maker)
+
+        # No calculation yet
+        r0 = client.get(f"/api/v1/shu/fiscal-years/{fy.id}/calculation/")
+        assert r0.status_code == 204
+
+        # Create one
+        r1 = client.post(
+            "/api/v1/shu/calculate/",
+            {"fy_id": str(fy.id)},
+            format="json",
+        )
+        assert r1.status_code == 201
+
+        # Now fetch it
+        r2 = client.get(f"/api/v1/shu/fiscal-years/{fy.id}/calculation/")
+        assert r2.status_code == 200
+        assert r2.data["id"] == r1.data["id"]
+
+
+# ====================================================================
+# Governance
+# ====================================================================
+class TestGovernanceHTTP:
+    def test_list_active_config(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/governance/config/")
+        assert resp.status_code == 200
+        keys = {row["parameter_key"] for row in resp.data}
+        assert "shu_split" in keys
+
+    def test_propose_change(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/governance/config/propose/",
+            {
+                "parameter_key": "obligatory_savings_monthly_cap",
+                "proposed_value": {"value": 25},
+                "effective_from": "2027-01-01",
+            },
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["status"] == "PENDING_CHECK"
+
+    def test_propose_unknown_parameter(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.post(
+            "/api/v1/governance/config/propose/",
+            {
+                "parameter_key": "not_a_real_key",
+                "proposed_value": {"x": 1},
+                "effective_from": "2027-01-01",
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_certify_change(self, db, api_for, maker, certifier):
+        maker_c = api_for(maker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/governance/config/propose/",
+            {
+                "parameter_key": "obligatory_savings_monthly_cap",
+                "proposed_value": {"value": 30},
+                "effective_from": "2027-01-01",
+            },
+            format="json",
+        )
+        change_id = r.data["id"]
+
+        # Manually bump to PENDING_CERTIFY (bypassing pipeline for simplicity)
+        change = GlobalConfigChange.objects.get(id=change_id)
+        change.status = GlobalConfigChange.Status.PENDING_CERTIFY
+        change.save(update_fields=["status"])
+
+        resp = certifier_c.post(
+            f"/api/v1/governance/config/certify/{change_id}/",
+            format="json",
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.data["status"] == "CERTIFIED"
+
+        # Confirm it landed in global_config
+        active = GlobalConfig.objects.filter(
+            parameter_key="obligatory_savings_monthly_cap",
+            status="ACTIVE",
+            effective_from="2027-01-01",
+        ).first()
+        assert active is not None
+        assert active.parameter_value == {"value": 30}
+
+    def test_list_changes(self, db, api_for, maker, board):
+        maker_c = api_for(maker)
+        maker_c.post(
+            "/api/v1/governance/config/propose/",
+            {
+                "parameter_key": "loan_interest_rate_range",
+                "proposed_value": {"min": 0.01, "max": 0.025},
+                "effective_from": "2027-01-01",
+            },
+            format="json",
+        )
+
+        board_c = api_for(board)
+        resp = board_c.get("/api/v1/governance/changes/")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+
+
+# ====================================================================
+# Reports
+# ====================================================================
+class TestReportsHTTP:
+    def test_dashboard(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get("/api/v1/reports/dashboard/")
+        assert resp.status_code == 200
+        assert "members" in resp.data
+        assert "savings" in resp.data
+        assert "loans" in resp.data
+        assert "pipeline" in resp.data
+        assert "recent_activity" in resp.data
+
+    def test_trial_balance(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/?as_of=2026-06-30")
+        assert resp.status_code == 200
+        assert isinstance(resp.data, list)
+
+    def test_income_statement(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(
+            "/api/v1/reports/income-statement/?start=2025-07-01&end=2026-06-30"
+        )
+        assert resp.status_code == 200
+        assert "net_surplus" in resp.data
+
+    def test_balance_sheet(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/balance-sheet/?as_of=2026-06-30")
+        assert resp.status_code == 200
+        assert "balanced" in resp.data
+        assert "total_assets" in resp.data
+
+    def test_maker_cannot_access_reports(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/reports/trial-balance/?as_of=2026-06-30")
+        assert resp.status_code == 403
+
+
+# ====================================================================
+# Pipeline
+# ====================================================================
+class TestPipelineHTTP:
+    def _make_pending_deposit(self, maker_c, maria):
+        """Helper — creates a pending deposit and returns the actor id."""
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        assert r.status_code == 201, r.content
+        return r.data["pipeline_actor"]
+
+    def test_pending_check_queue(self, db, api_for, maker, checker, maria):
+        maker_c = api_for(maker)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        checker_c = api_for(checker)
+        resp = checker_c.get("/api/v1/pipeline/pending-check/")
+        assert resp.status_code == 200
+        ids = [str(row["id"]) for row in resp.data]
+        assert str(actor_id) in ids
+
+    def test_check_moves_to_pending_certify(self, db, api_for, maker, checker, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        resp = checker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+        assert resp.status_code == 200
+        assert resp.data["status"] == "PENDING_CERTIFY"
+        assert resp.data["checker_username"] == checker.user.username
+
+    def test_certify_completes(self, db, api_for, maker, checker, certifier, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        checker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+        resp = certifier_c.post(f"/api/v1/pipeline/{actor_id}/certify/", format="json")
+        assert resp.status_code == 200
+        assert resp.data["status"] == "COMPLETED"
+        assert resp.data["certifier_username"] == certifier.user.username
+
+    def test_reject_flow(self, db, api_for, maker, checker, maria):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        resp = checker_c.post(
+            f"/api/v1/pipeline/{actor_id}/reject/",
+            {"reason": "documentation missing"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["status"] == "REJECTED"
+
+    def test_maker_cannot_check_own_transaction(self, db, api_for, maker, maria):
+        maker_c = api_for(maker)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        # Maker tries to check their own transaction
+        resp = maker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+        # Maker doesn't have CHECKER role → 403
+        assert resp.status_code == 403
+
+    def test_pending_check_includes_target_summary(
+    self, db, api_for, maker, checker, maria
+):
+        maker_c = api_for(maker)
+        actor_id = self._make_pending_deposit(maker_c, maria)
+
+        checker_c = api_for(checker)
+        resp = checker_c.get("/api/v1/pipeline/pending-check/")
+        assert resp.status_code == 200
+
+        row = next(r for r in resp.data if str(r["id"]) == str(actor_id))
+        summary = row["target_summary"]
+        assert summary is not None
+        assert summary["kind"] == "DEPOSIT"
+        assert summary["member_number"] == maria.membership_number
+        assert "Deposit" in summary["label"]
+        assert summary["amount"] == "100.00"
+
+    def test_member_onboard_summary(self, db, api_for, maker, checker):
+        maker_c = api_for(maker)
+
+        # Create a pending member
+        r = maker_c.post("/api/v1/members/", {
+            "first_name": "Sum", "last_name": "Mary",
+            "phone_number": "77000888",
+            "date_of_birth": "1990-01-01",
+        }, format="json")
+        member_id = r.data["id"]
+
+        # Pay initial capital
+        r2 = maker_c.post(
+            f"/api/v1/members/{member_id}/initial-capital/",
+            {"amount": "50.00"},
+            format="json",
+        )
+        actor_id = r2.data["pipeline_actor_id"]
+
+        checker_c = api_for(checker)
+        resp = checker_c.get("/api/v1/pipeline/pending-check/")
+        row = next(r for r in resp.data if str(r["id"]) == str(actor_id))
+        summary = row["target_summary"]
+        assert summary["kind"] == "INITIAL_CAPITAL"
+        assert "Initial capital" in summary["label"]
+        assert summary["amount"] == "50.00"

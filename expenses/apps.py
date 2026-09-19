@@ -7,3 +7,4 @@ class ExpensesConfig(AppConfig):
 
     def ready(self):
         from expenses import handlers
+        from expenses import summaries

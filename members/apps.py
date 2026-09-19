@@ -7,4 +7,4 @@ class MembersConfig(AppConfig):
 
     def ready(self):
         from members import handlers
-        from ledger.signals import journal_entry_certified
+        from members import summaries

@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsMaker, IsBoardOrChecker
+from core.permissions import IsMaker, IsStaffReadSavings
 from members.models import Member
 from savings.api.serializers import (
     TransactionSerializer,
@@ -46,7 +46,7 @@ class WithdrawView(APIView):
 
 
 class TransactionListView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadSavings]
 
     def get(self, request):
         qs = Transaction.objects.select_related("member").order_by("-created_at")
@@ -60,8 +60,19 @@ class TransactionListView(APIView):
 
 
 class MemberVoluntaryView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadSavings]
 
     def get(self, request, member_id):
-        vd = get_object_or_404(MemberVoluntaryDeposit, member_id=member_id)
+        member = get_object_or_404(Member, pk=member_id)
+        vd = MemberVoluntaryDeposit.objects.filter(member=member).first()
+        if vd is None:
+            # Member has never deposited; return zeros (no DB write on read).
+            return Response(
+                {
+                    "member": str(member.id),
+                    "balance_available": "0.00",
+                    "balance_held_pipeline": "0.00",
+                    "updated_at": None,
+                }
+            )
         return Response(VoluntaryDepositSerializer(vd).data)

@@ -90,11 +90,7 @@ def onboard_member(
 
 
 @transaction.atomic
-def pay_initial_capital(*, member, amount, maker_user, entry_date=None) -> MemberOnboarding:
-    """
-    First capital contribution. Enforces the US$50 minimum.
-    Only allowed while member is PENDING.
-    """
+def pay_initial_capital(*, member, amount, maker_user, entry_date=None):
     entry_date = entry_date or today()
     amount = round_money(Decimal(str(amount)))
 
@@ -105,7 +101,6 @@ def pay_initial_capital(*, member, amount, maker_user, entry_date=None) -> Membe
             f"MIN_CAPITAL_50_USD_REQUIRED: minimum is {MIN_MEMBER_CAPITAL}."
         )
 
-    # Post a DRAFT journal entry: Dr Cash, Cr Kapital Sosial
     je = post_journal_entry(
         description=f"Initial capital for {member.membership_number}",
         lines=[
@@ -116,23 +111,24 @@ def pay_initial_capital(*, member, amount, maker_user, entry_date=None) -> Membe
         entry_date=entry_date,
     )
 
-    actor = create_pipeline(
-        transaction_type="MEMBER_ONBOARD",
-        target_record_id=member.id,
-        maker_user=maker_user,
-    )
-
-    # Store the JE reference on the pipeline actor target via a lightweight
-    # transaction record would be cleaner, but for this demo we stash the JE id
-    # on the pipeline actor target (see note below).
-    # In production, use an explicit MemberOnboarding record.
+    # 1. Create the onboarding record WITHOUT the pipeline actor.
     onboarding = MemberOnboarding.objects.create(
         member=member,
         initial_capital_amount=amount,
         journal_entry=je,
-        pipeline_actor=actor,
         status=MemberOnboarding.Status.PENDING_CHECK,
     )
+
+    # 2. Create the actor with target_record_id = onboarding.id.
+    actor = create_pipeline(
+        transaction_type="MEMBER_ONBOARD",
+        target_record_id=onboarding.id,
+        maker_user=maker_user,
+    )
+
+    # 3. Link them.
+    onboarding.pipeline_actor = actor
+    onboarding.save(update_fields=["pipeline_actor"])
     return onboarding
 
 
@@ -173,11 +169,7 @@ def reactivate_member(member: Member) -> Member:
 # Exit / capital refund
 # ====================================================================
 @transaction.atomic
-def request_exit(*, member, maker_user, entry_date=None) -> MemberExitRequest:
-    """
-    Checks obligations, posts a DRAFT refund entry, and creates the pipeline.
-    Refund is posted to the member's capital account (3101) contra cash.
-    """
+def request_exit(*, member, maker_user, entry_date=None):
     from loans.models import Loan
 
     entry_date = entry_date or today()
@@ -186,18 +178,11 @@ def request_exit(*, member, maker_user, entry_date=None) -> MemberExitRequest:
         raise ValidationError("Only ACTIVE members can exit.")
     if member.kapital_sosial_balance <= 0:
         raise ValidationError("Member has no capital to refund.")
-
-    # Outstanding loan check
-    active_loans = Loan.objects.filter(
-        member=member,
-        status__in=[Loan.Status.DISBURSED],
-    )
-    if active_loans.exists():
+    if Loan.objects.filter(member=member, status=Loan.Status.DISBURSED).exists():
         raise ValidationError("MEMBER_HAS_OUTSTANDING_OBLIGATIONS")
 
     refund_amount = member.kapital_sosial_balance
 
-    # Post DRAFT refund JE: Dr Kapital Sosial, Cr Cash
     je = post_journal_entry(
         description=f"Capital refund on exit – {member.membership_number}",
         lines=[
@@ -208,19 +193,20 @@ def request_exit(*, member, maker_user, entry_date=None) -> MemberExitRequest:
         entry_date=entry_date,
     )
 
-    actor = create_pipeline(
-        transaction_type="MEMBER_EXIT",
-        target_record_id=member.id,
-        maker_user=maker_user,
-    )
-
     exit_request = MemberExitRequest.objects.create(
         member=member,
         refund_amount=refund_amount,
         journal_entry=je,
-        pipeline_actor=actor,
         status=MemberExitRequest.Status.PENDING_CHECK,
     )
+
+    actor = create_pipeline(
+        transaction_type="MEMBER_EXIT",
+        target_record_id=exit_request.id,
+        maker_user=maker_user,
+    )
+    exit_request.pipeline_actor = actor
+    exit_request.save(update_fields=["pipeline_actor"])
     return exit_request
 
 

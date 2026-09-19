@@ -2,11 +2,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsBoardOrChecker
+
+from rest_framework.permissions import IsAuthenticated
 from reports.services import (
     trial_balance,
     income_statement,
     balance_sheet,
     surplus_distribution,
+    dashboard_summary,
 )
 
 
@@ -43,3 +46,10 @@ class SurplusDistributionView(APIView):
         if not result:
             return Response({"detail": "No SHU calculation found."}, status=404)
         return Response(result)
+
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(dashboard_summary())

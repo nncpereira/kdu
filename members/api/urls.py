@@ -6,6 +6,14 @@ from members.api.views import (
     MemberExitView,
 )
 
+from members.api.me_views import (
+    MyProfileView,
+    MySavingsView,
+    MyTransactionsView,
+    MyLoansView,
+    MyShuStatementView,
+)
+
 app_name = "members"
 
 urlpatterns = [
@@ -17,4 +25,9 @@ urlpatterns = [
         name="initial-capital",
     ),
     path("<uuid:pk>/exit/", MemberExitView.as_view(), name="exit"),
+    path("me/", MyProfileView.as_view(), name="me"),
+    path("me/savings/", MySavingsView.as_view(), name="me-savings"),
+    path("me/transactions/", MyTransactionsView.as_view(), name="me-transactions"),
+    path("me/loans/", MyLoansView.as_view(), name="me-loans"),
+    path("me/shu/<int:year>/", MyShuStatementView.as_view(), name="me-shu"),
 ]

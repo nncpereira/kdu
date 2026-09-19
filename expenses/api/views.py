@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsMaker, IsBoardOrChecker
+from core.permissions import IsMaker, IsStaffReadExpenses
 from expenses.api.serializers import ExpenseSerializer, ExpenseCreateSerializer
 from expenses.models import Expense
 from expenses.services import record_expense
@@ -12,7 +12,7 @@ class ExpenseListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsMaker()]
-        return [IsBoardOrChecker()]
+        return [IsStaffReadExpenses()]
 
     def get(self, request):
         qs = Expense.objects.all().order_by("-payment_date")
@@ -29,7 +29,7 @@ class ExpenseListCreateView(APIView):
 
 
 class ExpenseDetailView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadExpenses]
 
     def get(self, request, pk):
         expense = Expense.objects.get(pk=pk)

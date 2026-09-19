@@ -8,3 +8,4 @@ class ShuConfig(AppConfig):
     def ready(self):
         # Register pipeline handlers on app load.
         from shu import handlers
+        from shu import summaries

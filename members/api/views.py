@@ -1,8 +1,10 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+from core.pagination import StandardPagination
 
-from core.permissions import IsMaker, IsBoardOrChecker
+from core.permissions import IsMaker, IsStaffReadMembers
 from members.api.serializers import (
     MemberSerializer,
     MemberCreateSerializer,
@@ -17,14 +19,16 @@ class MemberListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsMaker()]
-        return [IsBoardOrChecker()]
+        return [IsStaffReadMembers()]
 
     def get(self, request):
         qs = Member.objects.all().order_by("membership_number")
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response(MemberSerializer(qs, many=True).data)
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        return paginator.get_paginated_response(MemberSerializer(page, many=True).data)
 
     def post(self, request):
         serializer = MemberCreateSerializer(data=request.data)
@@ -37,10 +41,10 @@ class MemberListCreateView(APIView):
 
 
 class MemberDetailView(APIView):
-    permission_classes = [IsBoardOrChecker]
+    permission_classes = [IsStaffReadMembers]
 
     def get(self, request, pk):
-        member = Member.objects.get(pk=pk)
+        member = get_object_or_404(Member, pk=pk)
         return Response(MemberSerializer(member).data)
 
 

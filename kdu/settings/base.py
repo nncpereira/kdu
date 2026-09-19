@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "drf_spectacular",
 
     # KDU - infrastructure apps
     "core",
@@ -211,9 +212,39 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_PARSER_CLASSES": ("rest_framework.parsers.JSONParser",),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "core.exceptions.drf_exception_handler",
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "KDU Cooperative API",
+    "DESCRIPTION": (
+        "Enterprise Koperasi Core Banking & SHU Engine. "
+        "Compliant with DL 16/2004 as amended by DL 76/2022."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SORT_OPERATIONS": True,
+    "TAGS": [
+        {"name": "auth", "description": "JWT authentication"},
+        {"name": "users", "description": "Current user profile"},
+        {"name": "members", "description": "Member register"},
+        {"name": "savings", "description": "Deposits and withdrawals"},
+        {"name": "loans", "description": "Loan origination and repayment"},
+        {"name": "expenses", "description": "Operating expenses"},
+        {"name": "shu", "description": "Annual surplus distribution"},
+        {"name": "governance", "description": "Global configuration"},
+        {"name": "reports", "description": "Financial statements"},
+        {"name": "pipeline", "description": "Maker-Checker-Certifier"},
+        {"name": "dashboard", "description": "Dashboard aggregates"},
+    ],
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+        "displayOperationId": False,
+    },
+}
 
 # ====================================================================
 # JWT

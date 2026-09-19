@@ -1,8 +1,72 @@
 from collections import defaultdict
 from decimal import Decimal
-
+from django.db.models import Count, Sum
 from ledger.models import JournalTransactionLine
 from accounting.models import Account
+
+
+def dashboard_summary():
+    from members.models import Member
+    from savings.models import MemberVoluntaryDeposit, Transaction as SavingsTxn
+    from loans.models import Loan
+    from pipeline.models import TransactionPipelineActor
+
+    members_active = Member.objects.filter(status="Active").count()
+    members_pending = Member.objects.filter(status="Pending").count()
+    members_dormant = Member.objects.filter(status="Dormant").count()
+
+    voluntary_total = MemberVoluntaryDeposit.objects.aggregate(
+        t=Sum("balance_available")
+    )["t"] or Decimal("0")
+
+    loans_disbursed = Loan.objects.filter(status="DISBURSED").count()
+    outstanding_total = Loan.objects.filter(status="DISBURSED").aggregate(
+        t=Sum("principal_outstanding")
+    )["t"] or Decimal("0")
+
+    pending_check = TransactionPipelineActor.objects.filter(
+        status="PENDING_CHECK"
+    ).count()
+    pending_certify = TransactionPipelineActor.objects.filter(
+        status="PENDING_CERTIFY"
+    ).count()
+
+    recent = list(
+        SavingsTxn.objects.select_related("member")
+        .order_by("-created_at")
+        .values(
+            "transaction_type",
+            "requested_amount",
+            "member__membership_number",
+            "created_at",
+        )[:10]
+    )
+
+    return {
+        "members": {
+            "active": members_active,
+            "pending": members_pending,
+            "dormant": members_dormant,
+        },
+        "savings": {"voluntary_total": str(voluntary_total)},
+        "loans": {
+            "disbursed": loans_disbursed,
+            "outstanding_total": str(outstanding_total),
+        },
+        "pipeline": {
+            "pending_check": pending_check,
+            "pending_certify": pending_certify,
+        },
+        "recent_activity": [
+            {
+                "type": r["transaction_type"],
+                "amount": str(r["requested_amount"]),
+                "member_number": r["member__membership_number"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in recent
+        ],
+    }
 
 
 def _signed(entry_type: str, amount: Decimal) -> Decimal:

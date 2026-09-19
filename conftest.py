@@ -143,7 +143,7 @@ def certifier(db):
 
 @pytest.fixture
 def superadmin(db):
-    return _make_user("admin", UserProfile.Role.SUPERADMIN)
+    return _make_user("test-superadmin", UserProfile.Role.SUPERADMIN)
 
 
 @pytest.fixture

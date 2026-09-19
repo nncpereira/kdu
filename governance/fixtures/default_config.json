@@ -26,21 +26,37 @@
     }
   },
   {
-    "model": "governance.globalconfig",
-    "pk": 3,
-    "fields": {
-      "parameter_key": "shu_split",
-      "parameter_value": {
-        "reserva_legal_pct": 10,
-        "admin_fund_pct": 30,
-        "jasa_simpanan_pct": 25,
-        "jasa_bunga_pct": 35
-      },
-      "effective_from": "2025-01-01",
-      "status": "ACTIVE",
-      "created_by": 1,
-      "created_at": "2025-01-01T00:00:00Z",
-      "updated_at": "2025-01-01T00:00:00Z"
-    }
+  "model": "governance.globalconfig",
+  "pk": 3,
+  "fields": {
+    "parameter_key": "shu_split",
+    "parameter_value": {
+      "reserva_legal_pct": 25,
+      "admin_fund_pct": 25,
+      "jasa_simpanan_pct": 25,
+      "jasa_bunga_pct": 25
+    },
+    "effective_from": "2025-01-01",
+    "status": "ACTIVE",
+    "created_by": 1
   }
+}
+  // {
+  //   "model": "governance.globalconfig",
+  //   "pk": 3,
+  //   "fields": {
+  //     "parameter_key": "shu_split",
+  //     "parameter_value": {
+  //       "reserva_legal_pct": 10,
+  //       "admin_fund_pct": 30,
+  //       "jasa_simpanan_pct": 25,
+  //       "jasa_bunga_pct": 35
+  //     },
+  //     "effective_from": "2025-01-01",
+  //     "status": "ACTIVE",
+  //     "created_by": 1,
+  //     "created_at": "2025-01-01T00:00:00Z",
+  //     "updated_at": "2025-01-01T00:00:00Z"
+  //   }
+  // }
 ]

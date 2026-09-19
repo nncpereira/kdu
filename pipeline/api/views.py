@@ -1,14 +1,19 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsChecker, IsCertifier, IsBoardOrChecker
+from core.permissions import (
+    IsChecker,
+    IsCertifier,
+    IsCertifierOrSuperadmin,
+    IsBoardOrChecker,
+)
 from pipeline.api.serializers import PipelineActorSerializer
 from pipeline.models import TransactionPipelineActor
 from pipeline.services import check, certify, reject
 
 
 class PendingCheckListView(APIView):
-    permission_classes = [IsChecker]
+    permission_classes = [IsBoardOrChecker]
 
     def get(self, request):
         qs = TransactionPipelineActor.objects.filter(
@@ -18,7 +23,7 @@ class PendingCheckListView(APIView):
 
 
 class PendingCertifyListView(APIView):
-    permission_classes = [IsCertifier]
+    permission_classes = [IsCertifierOrSuperadmin]
 
     def get(self, request):
         qs = TransactionPipelineActor.objects.filter(

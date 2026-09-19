@@ -47,17 +47,15 @@ def _sync_kapital_sosial(sender, journal_entry, certified_by, **kwargs):
 @register("MEMBER_ONBOARD", "on_certify")
 @transaction.atomic
 def on_onboarding_certified(actor, certifier_user):
-    onboarding = MemberOnboarding.objects.select_for_update().get(pipeline_actor=actor)
+    onboarding = MemberOnboarding.objects.select_for_update().get(
+        pk=actor.target_record_id  # ← was: pipeline_actor=actor
+    )
     certify_journal_entry(onboarding.journal_entry, certifier_user)
 
     member = Member.objects.select_for_update().get(pk=onboarding.member_id)
-    # The onboarding JE was created at maker time; find it by description/date
-    # and certify it. In a stricter design, an explicit MemberOnboarding model
-    # would hold the JE reference (recommended).
     if member.kapital_sosial_balance >= 50:
         member.status = Member.Status.ACTIVE
         member.save(update_fields=["status", "updated_at"])
-        # Auto-provision a self-service login
         provision_member_user(member)
 
     onboarding.status = MemberOnboarding.Status.COMPLETED
@@ -67,7 +65,9 @@ def on_onboarding_certified(actor, certifier_user):
 @register("MEMBER_ONBOARD", "on_reject")
 @transaction.atomic
 def on_onboarding_rejected(actor, rejector_user, reason):
-    onboarding = MemberOnboarding.objects.select_for_update().get(pipeline_actor=actor)
+    onboarding = MemberOnboarding.objects.select_for_update().get(
+        pk=actor.target_record_id  # ← was: pipeline_actor=actor
+    )
     onboarding.status = MemberOnboarding.Status.REJECTED
     onboarding.save(update_fields=["status", "updated_at"])
 
@@ -78,18 +78,19 @@ def on_onboarding_rejected(actor, rejector_user, reason):
 @register("MEMBER_EXIT", "on_certify")
 @transaction.atomic
 def on_exit_certified(actor, certifier_user):
-    exit_req = MemberExitRequest.objects.select_for_update().get(pipeline_actor=actor)
+    exit_req = MemberExitRequest.objects.select_for_update().get(
+        pk=actor.target_record_id  # ← was: pipeline_actor=actor
+    )
     certify_journal_entry(exit_req.journal_entry, certifier_user)
 
-    member = Member.objects.select_for_update().get(pk=exit_req.member.pk)
+    member = Member.objects.select_for_update().get(pk=exit_req.member_id)
     member.status = Member.Status.CLOSED
     member.save(update_fields=["status", "updated_at"])
 
     exit_req.status = MemberExitRequest.Status.COMPLETED
     exit_req.save(update_fields=["status", "updated_at"])
 
-    # Deactivate the linked auth user if any
-    if member.user:
+    if member.user_id:
         member.user.is_active = False
         member.user.save(update_fields=["is_active"])
 
@@ -97,6 +98,8 @@ def on_exit_certified(actor, certifier_user):
 @register("MEMBER_EXIT", "on_reject")
 @transaction.atomic
 def on_exit_rejected(actor, rejector_user, reason):
-    exit_req = MemberExitRequest.objects.select_for_update().get(pipeline_actor=actor)
+    exit_req = MemberExitRequest.objects.select_for_update().get(
+        pk=actor.target_record_id  # ← was: pipeline_actor=actor
+    )
     exit_req.status = MemberExitRequest.Status.REJECTED
     exit_req.save(update_fields=["status", "updated_at"])

@@ -1,5 +1,7 @@
 from rest_framework import serializers
+
 from pipeline.models import TransactionPipelineActor
+from pipeline.summaries import get_summary
 
 
 class PipelineActorSerializer(serializers.ModelSerializer):
@@ -10,6 +12,7 @@ class PipelineActorSerializer(serializers.ModelSerializer):
     certifier_username = serializers.CharField(
         source="certifier.user.username", read_only=True, allow_null=True
     )
+    target_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = TransactionPipelineActor
@@ -25,4 +28,8 @@ class PipelineActorSerializer(serializers.ModelSerializer):
             "certifier_username",
             "status",
             "updated_at",
+            "target_summary",
         ]
+
+    def get_target_summary(self, obj):
+        return get_summary(obj.transaction_type, obj.target_record_id)

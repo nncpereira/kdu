@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from shu.models import ShuCalculation, ShuMemberPayout
-
+from shu.models import ShuCalculation, ShuMemberPayout, ShuFiscalYear
 
 class ShuCalculationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -40,3 +39,24 @@ class ShuMemberPayoutSerializer(serializers.ModelSerializer):
             "net_payout",
             "status",
         ]
+
+
+class ShuFiscalYearSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShuFiscalYear
+        fields = [
+            "id",
+            "year_start",
+            "year_end",
+            "status",
+            "net_surplus",
+            "kapital_sosial",
+            "accumulated_reserva_legal",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CreateFiscalYearSerializer(serializers.Serializer):
+    year_start = serializers.DateField()
+    year_end = serializers.DateField()

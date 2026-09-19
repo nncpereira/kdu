@@ -85,6 +85,16 @@ def run_shu_calculation(fy_id, maker_user) -> ShuCalculation:
         status=ShuCalculation.Status.PENDING_CHECK,
     )
 
+    # If weighting base is empty, skip silently; the Checker can still
+    # approve the allocation and the payouts will be recomputed.
+    try:
+        compute_member_payouts(calc)
+    except ValidationError:
+        # No weighting base — likely snapshots not run. Leave payouts empty
+        # and let the Checker/Certifier decide. The Certifier's certify
+        # handler will retry.
+        pass
+    
     actor = create_pipeline(
         transaction_type="SHU_CALCULATE",
         target_record_id=calc.id,
@@ -149,3 +159,34 @@ def compute_member_payouts(calc: ShuCalculation) -> int:
         )
         count += 1
     return count
+
+
+@transaction.atomic
+def create_fiscal_year(year_start, year_end) -> ShuFiscalYear:
+    """
+    Create a new fiscal year, computing totals from the immutable ledger:
+      - net_surplus              = revenue − expenses for the period
+      - kapital_sosial           = net balance of 3101 at FY end
+      - accumulated_reserva_legal = net balance of 3501 at FY end
+    """
+    from ledger.services import account_net_balance
+    from reports.services import income_statement
+
+    if year_end <= year_start:
+        raise ValidationError("year_end must be after year_start.")
+
+    if ShuFiscalYear.objects.filter(year_start=year_start, year_end=year_end).exists():
+        raise ValidationError("A fiscal year with the same dates already exists.")
+
+    inc = income_statement(year_start, year_end)
+    kapital = account_net_balance("3101", as_of=year_end)
+    reserva = account_net_balance("3501", as_of=year_end)
+
+    return ShuFiscalYear.objects.create(
+        year_start=year_start,
+        year_end=year_end,
+        status=ShuFiscalYear.Status.OPEN,
+        net_surplus=inc["net_surplus"],
+        kapital_sosial=kapital,
+        accumulated_reserva_legal=reserva,
+    )

@@ -7,3 +7,4 @@ class LoansConfig(AppConfig):
 
     def ready(self):
         from loans import handlers
+        from loans import summaries

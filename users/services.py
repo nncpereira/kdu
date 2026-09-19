@@ -77,3 +77,25 @@ def create_member_user(*, member, email="", first_name="", last_name=""):
     member.save(update_fields=["user", "updated_at"])
     user._temp_password = temp
     return user
+
+
+@transaction.atomic
+def set_staff_active(profile: UserProfile, active: bool) -> UserProfile:
+    """Enable or disable a staff user's ability to log in."""
+    profile.user.is_active = active
+    profile.user.save(update_fields=["is_active"])
+    return profile
+
+
+@transaction.atomic
+def update_staff_profile(profile: UserProfile, **fields) -> UserProfile:
+    """Update the linked auth user's editable fields."""
+    user_fields = {}
+    for key in ("first_name", "last_name", "email"):
+        if key in fields:
+            user_fields[key] = fields[key]
+    if user_fields:
+        for k, v in user_fields.items():
+            setattr(profile.user, k, v)
+        profile.user.save(update_fields=list(user_fields.keys()))
+    return profile

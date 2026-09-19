@@ -4,6 +4,7 @@ from reports.api.views import (
     IncomeStatementView,
     BalanceSheetView,
     SurplusDistributionView,
+    DashboardView,
 )
 
 app_name = "reports"
@@ -17,4 +18,5 @@ urlpatterns = [
         SurplusDistributionView.as_view(),
         name="surplus-distribution",
     ),
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
 ]
