@@ -12,6 +12,7 @@ import { Badge } from "@/components/Badge";
 import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
 import { toast } from "sonner";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export function ShuDetailPage() {
   const { fyId } = useParams<{ fyId: string }>();
@@ -103,10 +104,30 @@ export function ShuDetailPage() {
   });
 
   if (fyQuery.isLoading) {
-    return <div className="p-6 text-sm text-gray-500">Loading…</div>;
-  }
+  return (
+    <div className="p-6">
+      <Breadcrumbs
+        items={[
+          { label: "SHU", to: "/shu" },
+          { label: "Loading…" },
+        ]}
+      />
+      <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+    </div>
+  );
+}
   if (fyQuery.isError || !fyQuery.data) {
-    return <div className="p-6 text-sm text-red-600">Fiscal year not found.</div>;
+    return (
+      <div className="p-6">
+        <Breadcrumbs
+          items={[
+            { label: "SHU", to: "/shu" },
+            { label: "Not found" },
+          ]}
+        />
+        <p className="text-sm text-red-600">Fiscal year not found.</p>
+      </div>
+    );
   }
 
   const fy = fyQuery.data;
@@ -120,17 +141,22 @@ export function ShuDetailPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/shu" className="text-sm text-brand-600 hover:underline">
-            ← Back to SHU
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-800 mt-2">
-            Fiscal Year {formatDate(fy.year_start)} – {formatDate(fy.year_end)}
-          </h1>
-          <p className="text-sm text-gray-500 font-mono">{fy.id}</p>
+      <div>
+        <Breadcrumbs
+          items={[
+            { label: "SHU", to: "/shu" },
+            { label: `Fiscal Year ${formatDate(fy.year_start)} – ${formatDate(fy.year_end)}` },
+          ]}
+        />
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Fiscal Year {formatDate(fy.year_start)} – {formatDate(fy.year_end)}
+            </h1>
+            <p className="text-sm text-gray-500 font-mono">{fy.id}</p>
+          </div>
+          <Badge value={fy.status} />
         </div>
-        <Badge value={fy.status} />
       </div>
 
       {/* Summary */}

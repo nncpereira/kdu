@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getLoan, listRepayments, LoanRepayment } from "@/api/loans";
 import { useAuth } from "@/auth/useAuth";
@@ -11,6 +11,7 @@ import { formatMoney, formatDate } from "@/lib/format";
 import { ManualRepaymentModal } from "./loans/ManualRepaymentModal";
 import { ScheduledRepaymentModal } from "./loans/ScheduledRepaymentModal";
 import { ReverseModal } from "@/components/ReverseModal";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -32,10 +33,30 @@ export function LoanDetailPage() {
   });
 
   if (loanQuery.isLoading) {
-    return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+    return (
+      <div className="p-6">
+        <Breadcrumbs
+          items={[
+            { label: "Loans", to: "/loans" },
+            { label: "Loading…" },
+          ]}
+        />
+        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+      </div>
+    );
   }
   if (loanQuery.isError || !loanQuery.data) {
-    return <div className="p-6 text-sm text-red-600">Loan not found.</div>;
+    return (
+      <div className="p-6">
+        <Breadcrumbs
+          items={[
+            { label: "Loans", to: "/loans" },
+            { label: "Not found" },
+          ]}
+        />
+        <p className="text-sm text-red-600">Loan not found.</p>
+      </div>
+    );
   }
 
   const loan = loanQuery.data;
@@ -52,17 +73,22 @@ export function LoanDetailPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/loans" className="text-sm text-brand-600 hover:underline">
-            ← Back to Loans
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-800 mt-2">
-            Loan · {loan.member_number}
-          </h1>
-          <p className="text-sm text-gray-500 font-mono">{loan.id}</p>
+      <div>
+        <Breadcrumbs
+          items={[
+            { label: "Loans", to: "/loans" },
+            { label: `Loan · ${loan.member_number}`},
+          ]}
+        />
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Loan · {loan.member_number}
+            </h1>
+            <p className="text-sm text-gray-500 font-mono">{loan.id}</p>
+          </div>
+          <Badge value={loan.status} />
         </div>
-        <Badge value={loan.status} />
       </div>
 
       {/* Actions */}

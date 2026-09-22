@@ -165,8 +165,11 @@
 </head>
 <body>
   <div class="letterhead">
-    <h1>Koperasi KDU</h1>
-    <div class="subtitle">Cooperative Core Banking System</div>
+    {% if logo_data_uri %}<img src="{{ logo_data_uri }}" alt="KDU logo">{% endif %}
+    <div class="letterhead-text">
+      <h1>Koperasi KDU</h1>
+      <div class="subtitle">Cooperative Core Banking System</div>
+    </div>
   </div>
 
   <h2 class="report-title">{{ title }}</h2>

@@ -2,8 +2,9 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "@/auth/useAuth";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/components/NotificationBell";
 
-const NAV: { to: string; label: string; role?: string }[] = [
+const NAV: { to: string; label: string; roles?: string | string[] }[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/members", label: "Members" },
   { to: "/savings", label: "Savings" },
@@ -12,8 +13,9 @@ const NAV: { to: string; label: string; role?: string }[] = [
   { to: "/shu", label: "SHU" },
   { to: "/pipeline", label: "Pipeline" },
   { to: "/reports", label: "Reports" },
+  { to: "/audit", label: "Audit Log", roles: ["SUPERADMIN", "BOARD", "AUDITOR"] },
   { to: "/governance", label: "Governance" },
-  { to: "/users", label: "Users", role: "SUPERADMIN" },
+  { to: "/users", label: "Users", roles: "SUPERADMIN" },
 ];
 
 export function AppLayout() {
@@ -24,12 +26,12 @@ export function AppLayout() {
     <div className="flex h-screen bg-gray-50">
       <aside className="w-60 bg-brand-700 text-white flex flex-col">
         {/* Letterhead with logo */}
-        <div className="px-5 py-5 border-b border-brand-600">
+        <div className="px-4 py-4 border-b border-brand-600">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
               <Logo size={38} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="text-base font-bold leading-tight tracking-tight">
                 KDU
               </h1>
@@ -37,12 +39,23 @@ export function AppLayout() {
                 Cooperative Core
               </p>
             </div>
+            {/* Show bell only for roles that have actionable notifications. */}
+            {profile?.role &&
+              ["MAKER", "CHECKER", "CERTIFIER", "SUPERADMIN"].includes(
+                profile.role
+              ) && <NotificationBell />}
           </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {NAV.filter((item) => !item.role || profile?.role === item.role).map(
+          {NAV.filter(
+            (item) =>
+              !item.roles ||
+              (Array.isArray(item.roles)
+                ? item.roles.includes(profile?.role ?? "")
+                : profile?.role === item.roles)
+          ).map(
             (item) => (
               <Link
                 key={item.to}
@@ -86,7 +99,7 @@ export function AppLayout() {
             </div>
           </Link>
           <button
-            onClick={logout}
+            onClick={async () => { await logout(); }}
             className="w-full text-left px-5 py-2.5 text-xs text-brand-100 hover:bg-brand-600 hover:text-white transition-colors"
           >
             Log out

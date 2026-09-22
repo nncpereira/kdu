@@ -17,8 +17,9 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(username, password);
-      navigate("/dashboard");
+      const p = await login(username, password);
+      if (p.role === "MEMBER") navigate("/portal/dashboard");
+      else navigate("/dashboard");
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? "Invalid username or password.");
     } finally {
@@ -87,6 +88,7 @@ export function LoginPage() {
 
             <p className="text-xs text-center text-gray-500 pt-2">
               Access is monitored. Contact a Superadmin if you need an account.
+              Staff and members sign in with the same form.
             </p>
           </form>
         </div>

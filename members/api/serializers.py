@@ -4,6 +4,8 @@ from members.models import Member, MemberOnboarding, MemberExitRequest
 
 class MemberSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
+    has_login = serializers.SerializerMethodField()
+    login_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Member
@@ -15,6 +17,8 @@ class MemberSerializer(serializers.ModelSerializer):
             "middle_name",
             "last_name",
             "full_name",
+            "has_login",
+            "login_username",
             "national_id",
             "phone_number",
             "email",
@@ -35,7 +39,15 @@ class MemberSerializer(serializers.ModelSerializer):
             "membership_number",
             "kapital_sosial_balance",
             "status",
+            "has_login",
+            "login_username",
         ]
+
+    def get_has_login(self, obj) -> bool:
+        return bool(obj.user_id)
+
+    def get_login_username(self, obj) -> str | None:
+        return obj.user.username if obj.user_id else None
 
 
 class MemberCreateSerializer(serializers.Serializer):
@@ -54,6 +66,22 @@ class MemberCreateSerializer(serializers.Serializer):
     posto = serializers.CharField(required=False, allow_blank=True, default="")
     municipio = serializers.CharField(required=False, allow_blank=True, default="")
     profession = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class UpdateMyMemberSerializer(serializers.Serializer):
+    """
+    Fields a member can edit about themselves.
+    Excludes name, DOB, national_id, membership_number, status, capital
+    — those are staff-managed or ledger-derived.
+    """
+
+    phone_number = serializers.CharField(max_length=20, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    aldeia = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    suco = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    posto = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    municipio = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    profession = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
 
 class InitialCapitalSerializer(serializers.Serializer):

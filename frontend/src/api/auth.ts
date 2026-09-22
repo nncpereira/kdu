@@ -1,35 +1,24 @@
-import { api } from "./client";
-
-export interface TokenPair {
-  access: string;
-  refresh: string;
-}
+import { api, refreshAccessToken } from "./client";
+import { tokenStore } from "@/lib/storage";
 
 export interface Profile {
   id: string;
   username: string;
   email: string;
-  role:
-    | "MAKER"
-    | "CHECKER"
-    | "CERTIFIER"
-    | "SUPERADMIN"
-    | "MEMBER"
-    | "BOARD"
-    | "AUDITOR";
+  first_name: string;
+  last_name: string;
+  role: "MAKER" | "CHECKER" | "CERTIFIER" | "SUPERADMIN" | "MEMBER" | "BOARD" | "AUDITOR";
   must_change_password: boolean;
   created_at: string;
 }
 
-export async function login(
-  username: string,
-  password: string
-): Promise<TokenPair> {
-  const { data } = await api.post<TokenPair>("/auth/token/", {
+// Login returns only the access token; refresh is in an HttpOnly cookie.
+export async function login(username: string, password: string): Promise<void> {
+  const { data } = await api.post<{ access: string }>("/auth/token/", {
     username,
     password,
   });
-  return data;
+  tokenStore.setAccess(data.access);
 }
 
 export async function getProfile(): Promise<Profile> {
@@ -46,3 +35,14 @@ export async function changePassword(
     new_password: newPassword,
   });
 }
+
+export async function logout(): Promise<void> {
+  try {
+    await api.post("/auth/logout/");
+  } catch {
+    // Ignore network errors; local state is cleared regardless.
+  }
+  tokenStore.clear();
+}
+
+export { refreshAccessToken };

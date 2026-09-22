@@ -5,9 +5,11 @@ const baseURL = import.meta.env.VITE_API_BASE || "/api/v1";
 
 export const api = axios.create({
   baseURL,
+  withCredentials: true,                // send cookies with every request
   headers: { "Content-Type": "application/json" },
 });
 
+// Attach access token (from memory) to every request.
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = tokenStore.getAccess();
   if (token) {
@@ -16,51 +18,48 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let isRefreshing = false;
-let queue: ((token: string) => void)[] = [];
+// Single in-flight refresh promise — dedupes concurrent 401s.
+let refreshPromise: Promise<string> | null = null;
+
+export async function refreshAccessToken(): Promise<string> {
+  const resp = await axios.post(
+    `${baseURL}/auth/token/refresh/`,
+    {},
+    { withCredentials: true }
+  );
+  const newAccess: string = resp.data.access;
+  tokenStore.setAccess(newAccess);
+  return newAccess;
+}
 
 api.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
     const original: any = error.config;
-    if (
-      error.response?.status === 401 &&
-      !original._retry &&
-      tokenStore.getRefresh()
-    ) {
+
+    if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
 
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          queue.push((token: string) => {
-            original.headers.Authorization = `Bearer ${token}`;
-            resolve(api(original));
-          });
+      // If a refresh is already in flight, wait for it.
+      if (!refreshPromise) {
+        refreshPromise = refreshAccessToken().finally(() => {
+          refreshPromise = null;
         });
       }
 
-      isRefreshing = true;
       try {
-        const refresh = tokenStore.getRefresh()!;
-        const resp = await axios.post(`${baseURL}/auth/token/refresh/`, {
-          refresh,
-        });
-        const newAccess: string = resp.data.access;
-        tokenStore.set(newAccess, refresh);
-
-        queue.forEach((cb) => cb(newAccess));
-        queue = [];
-
+        const newAccess = await refreshPromise;
         original.headers.Authorization = `Bearer ${newAccess}`;
         return api(original);
-      } catch (e) {
+      } catch (refreshErr) {
         tokenStore.clear();
-        window.location.href = "/login";
-        return Promise.reject(e);
-      } finally {
-        isRefreshing = false;
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshErr);
       }
     }
+
     return Promise.reject(error);
   }
 );

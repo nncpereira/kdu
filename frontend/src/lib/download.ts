@@ -5,10 +5,15 @@ import { api } from "@/api/client";
  * Because the SPA uses Bearer tokens (not cookies), we can't just
  * window.open() the URL — the request would be unauthenticated.
  */
-export async function downloadPdf(url: string, filename: string): Promise<void> {
-  const response = await api.get(url, { responseType: "blob" });
 
-  const blob = new Blob([response.data], { type: "application/pdf" });
+export async function downloadBlob(
+  url: string,
+  filename: string,
+  mimeType: string = "application/octet-stream"
+): Promise<void> {
+  const path = url.replace(/^\/api\/v1/, "");
+  const response = await api.get(path, { responseType: "blob" });
+  const blob = new Blob([response.data], { type: mimeType });
   const objectUrl = URL.createObjectURL(blob);
 
   const a = document.createElement("a");
@@ -18,6 +23,9 @@ export async function downloadPdf(url: string, filename: string): Promise<void> 
   a.click();
   document.body.removeChild(a);
 
-  // Give the browser a tick to start the download before revoking.
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+export async function downloadPdf(url: string, filename: string) {
+  return downloadBlob(url, filename, "application/pdf");
 }

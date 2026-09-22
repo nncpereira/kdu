@@ -20,6 +20,7 @@ class ProposeConfigChangeView(APIView):
         serializer.is_valid(raise_exception=True)
         change = propose_change(
             maker_user=request.user.profile,
+            request=request,
             **serializer.validated_data,
         )
         return Response(
@@ -33,7 +34,11 @@ class CertifyConfigChangeView(APIView):
 
     def post(self, request, pk):
         change = GlobalConfigChange.objects.get(pk=pk)
-        change = certify_change(change, certifier_user=request.user.profile)
+        change = certify_change(
+            change,
+            certifier_user=request.user.profile,
+            request=request,
+        )
         return Response(GlobalConfigChangeSerializer(change).data)
 
 

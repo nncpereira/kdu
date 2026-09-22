@@ -29,6 +29,8 @@ export interface Member {
   date_joined: string;
   last_transaction_at: string | null;
   created_at: string;
+  has_login: boolean;            
+  login_username: string | null; 
 }
 
 export interface Paginated<T> {
@@ -58,6 +60,30 @@ export interface PipelineResponse {
   onboarding_id?: string;
   exit_request_id?: string;
   pipeline_actor_id: string;
+}
+
+export interface LoginCredentials {
+  login_username: string;
+  temporary_password: string;
+  detail: string;
+}
+
+export async function createMemberLogin(
+  memberId: string
+): Promise<LoginCredentials> {
+  const { data } = await api.post<LoginCredentials>(
+    `/members/${memberId}/create-login/`
+  );
+  return data;
+}
+
+export async function resetMemberLoginPassword(
+  memberId: string
+): Promise<LoginCredentials> {
+  const { data } = await api.post<LoginCredentials>(
+    `/members/${memberId}/reset-login-password/`
+  );
+  return data;
 }
 
 export async function listMembers(params?: {

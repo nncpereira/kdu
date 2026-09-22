@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from core.pagination import StandardPagination
 
-from core.permissions import IsMaker, IsStaffReadMembers
+from core.permissions import IsMaker, IsStaffReadMembers, IsSuperadmin
 from members.api.serializers import (
     MemberSerializer,
     MemberCreateSerializer,
@@ -13,6 +13,11 @@ from members.api.serializers import (
 )
 from members.models import Member, MemberOnboarding, MemberExitRequest
 from members.services import onboard_member, pay_initial_capital, request_exit
+
+from users.models import UserProfile
+from users.services import create_member_user, issue_temp_password
+
+from audit.services import record_audit
 
 
 class MemberListCreateView(APIView):
@@ -84,3 +89,85 @@ class MemberExitView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class CreateMemberLoginView(APIView):
+    """
+    Superadmin-only. Creates an auth user for a member and returns
+    the temporary password ONCE. Idempotent for the user check.
+    """
+    permission_classes = [IsSuperadmin]
+
+    def post(self, request, pk):
+        member = get_object_or_404(Member, pk=pk)
+
+        if member.user_id:
+            return Response(
+                {
+                    "detail": (
+                        f"Member already has a login: "
+                        f"{member.user.username}. "
+                        f"Use Reset Password if needed."
+                    ),
+                    "login_username": member.user.username,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = create_member_user(member=member)
+
+        record_audit(
+            actor=request.user.profile,
+            action="MEMBER_LOGIN_CREATED",
+            target_type="MEMBER",
+            target_id=member.id,
+            target_repr=member.membership_number,
+            description=f"Created portal login for member {member.membership_number}",
+            metadata={"login_username": user.username},
+            request=request,
+        )
+
+        return Response({
+            "login_username": user.username,
+            "temporary_password": user._temp_password,
+            "detail": (
+                "Login created. Share the temporary password securely. "
+                "The member must change it on first login."
+            ),
+        }, status=status.HTTP_201_CREATED)
+
+
+class ResetMemberLoginPasswordView(APIView):
+    """
+    Superadmin-only. Issues a new temporary password for a member's login.
+    """
+    permission_classes = [IsSuperadmin]
+
+    def post(self, request, pk):
+        member = get_object_or_404(Member, pk=pk)
+
+        if not member.user_id:
+            return Response(
+                {"detail": "Member has no login to reset."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        temp = issue_temp_password(member.user)
+
+        record_audit(
+            actor=request.user.profile,
+            action="MEMBER_LOGIN_RESET",
+            target_type="MEMBER",
+            target_id=member.id,
+            target_repr=member.membership_number,
+            description=f"Reset portal password for member {member.membership_number}",
+            request=request,
+        )
+        
+        return Response({
+            "login_username": member.user.username,
+            "temporary_password": temp,
+            "detail": (
+                "Password reset. Share the temporary password securely."
+            ),
+        })

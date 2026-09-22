@@ -1,15 +1,17 @@
-const ACCESS_KEY = "kdu.access";
-const REFRESH_KEY = "kdu.refresh";
+/**
+ * Access token is held in memory only. It is not persisted to
+ * localStorage or sessionStorage, so a page reload discards it.
+ * On reload, the AuthContext calls /auth/token/refresh/ and, if the
+ * HttpOnly refresh cookie is still valid, obtains a new one.
+ */
+let accessToken: string | null = null;
 
 export const tokenStore = {
-  getAccess: () => localStorage.getItem(ACCESS_KEY),
-  getRefresh: () => localStorage.getItem(REFRESH_KEY),
-  set: (access: string, refresh: string) => {
-    localStorage.setItem(ACCESS_KEY, access);
-    localStorage.setItem(REFRESH_KEY, refresh);
+  getAccess: (): string | null => accessToken,
+  setAccess: (token: string | null): void => {
+    accessToken = token;
   },
-  clear: () => {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+  clear: (): void => {
+    accessToken = null;
   },
 };

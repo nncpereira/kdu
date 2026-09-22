@@ -90,6 +90,8 @@ class StaffUserListCreateView(APIView):
             email=serializer.validated_data.get("email", ""),
             first_name=serializer.validated_data.get("first_name", ""),
             last_name=serializer.validated_data.get("last_name", ""),
+            actor=request.user.profile,
+            request=request,
         )
 
         # Force password change on first login.
@@ -131,7 +133,12 @@ class StaffUserDisableView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        set_staff_active(profile, False)
+        set_staff_active(
+            profile,
+            False,
+            actor=request.user.profile,
+            request=request,
+        )
         profile.refresh_from_db()
         return Response(StaffUserSerializer(profile).data)
 
@@ -141,7 +148,12 @@ class StaffUserEnableView(APIView):
 
     def post(self, request, pk):
         profile = UserProfile.objects.select_related("user").get(pk=pk)
-        set_staff_active(profile, True)
+        set_staff_active(
+            profile,
+            True,
+            actor=request.user.profile,
+            request=request,
+        )
         profile.refresh_from_db()
         return Response(StaffUserSerializer(profile).data)
 
@@ -151,7 +163,11 @@ class StaffUserResetPasswordView(APIView):
 
     def post(self, request, pk):
         profile = UserProfile.objects.select_related("user").get(pk=pk)
-        temp = issue_temp_password(profile.user)
+        temp = issue_temp_password(
+            profile.user,
+            actor=request.user.profile,
+            request=request,
+        )
         return Response(
             {
                 "detail": "Temporary password issued. Share it securely; the user must change it on next login.",

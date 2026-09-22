@@ -1,20 +1,28 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
-  listPendingCheck, listPendingCertify,
-  checkActor, certifyActor, rejectActor,
+  listPendingCheck,
+  listPendingCertify,
+  checkActor,
+  PipelineActor,
 } from "@/api/pipeline";
 import { useAuth } from "@/auth/useAuth";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Table } from "@/components/Table";
-import { toast } from "sonner";
 import { TableSkeleton } from "@/components/Skeleton";
+import { CertifyConfirmModal } from "./pipeline/CertifyConfirmModal";
+import { RejectConfirmModal } from "./pipeline/RejectConfirmModal";
 
 export function PipelinePage() {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const role = profile?.role;
+
+  const [certifyTarget, setCertifyTarget] = useState<PipelineActor | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PipelineActor | null>(null);
 
   const checkQuery = useQuery({
     queryKey: ["pipeline", "check"],
@@ -28,34 +36,22 @@ export function PipelinePage() {
     enabled: role === "CERTIFIER" || role === "SUPERADMIN",
   });
 
-  const mutation = useMutation({
-    mutationFn: async (args: { action: string; id: string }) => {
-      if (args.action === "check") return checkActor(args.id);
-      if (args.action === "certify") return certifyActor(args.id);
-      return rejectActor(args.id, "rejected by " + role);
-    },
-    onSuccess: (_data, variables) => {
-      const verb = variables.action === "check" ? "approved" : variables.action === "certify" ? "certified" : "rejected";
-      toast.success(`Transaction ${verb}.`);
-      // Broad invalidation — React Query matches by prefix, so "member"
-      // catches ["member", id], "savings" catches ["savings", "voluntary", id], etc.
+  // Check stays one-click — it's reversible (certification still required).
+  const checkMutation = useMutation({
+    mutationFn: (id: string) => checkActor(id),
+    onSuccess: () => {
+      toast.success("Transaction approved. Awaiting certification.");
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["members"] });
-      qc.invalidateQueries({ queryKey: ["member"] });
-      qc.invalidateQueries({ queryKey: ["savings"] });
-      qc.invalidateQueries({ queryKey: ["loans"] });
-      qc.invalidateQueries({ queryKey: ["loan"] });
-      qc.invalidateQueries({ queryKey: ["repayments"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail ?? "Action failed.");
+      toast.error(err?.response?.data?.detail ?? "Approval failed.");
     },
   });
 
   const rows = [...(checkQuery.data ?? []), ...(certifyQuery.data ?? [])];
   const isLoading = checkQuery.isLoading || certifyQuery.isLoading;
-  const isError = checkQuery.isError || certifyQuery.isError;
 
   return (
     <div className="p-6 space-y-6">
@@ -67,18 +63,19 @@ export function PipelinePage() {
       </div>
 
       <Card>
-        {isError && (
-          <p className="text-sm text-red-600 py-8 text-center">
-            Failed to load pipeline items.
-          </p>
-        )}
-
-        {!isError && (
+        {isLoading ? (
           <Table
             headers={["Type", "Details", "Maker", "Status", "Actions"]}
-            empty={!isLoading && rows.length === 0}
+            empty={false}
           >
-            {isLoading ? <TableSkeleton rows={5} cols={5} /> : rows.map((r) => (
+            <TableSkeleton rows={5} cols={5} />
+          </Table>
+        ) : (
+          <Table
+            headers={["Type", "Details", "Maker", "Status", "Actions"]}
+            empty={rows.length === 0}
+          >
+            {rows.map((r) => (
               <tr
                 key={r.id}
                 className="border-b border-gray-100 hover:bg-gray-50"
@@ -97,16 +94,17 @@ export function PipelinePage() {
                       {r.target_summary.member_number}
                     </div>
                   )}
-                  {r.target_summary?.has_receipt && r.target_summary?.receipt_url && (
-                    <a
-                      href={r.target_summary.receipt_url as string}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block mt-1 text-xs text-brand-600 hover:underline"
-                    >
-                      📎 View receipt
-                    </a>
-                  )}
+                  {r.target_summary?.has_receipt &&
+                    r.target_summary?.receipt_url && (
+                      <a
+                        href={r.target_summary.receipt_url as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-1 text-xs text-brand-600 hover:underline"
+                      >
+                        📎 View receipt
+                      </a>
+                    )}
                 </td>
                 <td className="py-3 px-2 text-sm text-gray-600">
                   {r.maker_username}
@@ -119,17 +117,14 @@ export function PipelinePage() {
                     (role === "CHECKER" || role === "SUPERADMIN") && (
                       <>
                         <Button
-                          onClick={() =>
-                            mutation.mutate({ action: "check", id: r.id })
-                          }
+                          onClick={() => checkMutation.mutate(r.id)}
+                          loading={checkMutation.isPending}
                         >
                           Approve
                         </Button>
                         <Button
                           variant="danger"
-                          onClick={() =>
-                            mutation.mutate({ action: "reject", id: r.id })
-                          }
+                          onClick={() => setRejectTarget(r)}
                         >
                           Reject
                         </Button>
@@ -138,18 +133,12 @@ export function PipelinePage() {
                   {r.status === "PENDING_CERTIFY" &&
                     (role === "CERTIFIER" || role === "SUPERADMIN") && (
                       <>
-                        <Button
-                          onClick={() =>
-                            mutation.mutate({ action: "certify", id: r.id })
-                          }
-                        >
+                        <Button onClick={() => setCertifyTarget(r)}>
                           Certify
                         </Button>
                         <Button
                           variant="danger"
-                          onClick={() =>
-                            mutation.mutate({ action: "reject", id: r.id })
-                          }
+                          onClick={() => setRejectTarget(r)}
                         >
                           Reject
                         </Button>
@@ -161,6 +150,17 @@ export function PipelinePage() {
           </Table>
         )}
       </Card>
+
+      <CertifyConfirmModal
+        actor={certifyTarget}
+        open={!!certifyTarget}
+        onClose={() => setCertifyTarget(null)}
+      />
+      <RejectConfirmModal
+        actor={rejectTarget}
+        open={!!rejectTarget}
+        onClose={() => setRejectTarget(null)}
+      />
     </div>
   );
 }

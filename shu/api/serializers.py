@@ -60,3 +60,22 @@ class ShuFiscalYearSerializer(serializers.ModelSerializer):
 class CreateFiscalYearSerializer(serializers.Serializer):
     year_start = serializers.DateField()
     year_end = serializers.DateField()
+
+
+class MyShuPayoutSerializer(serializers.ModelSerializer):
+    fiscal_year_start = serializers.DateField(
+        source="calc.fy.year_start", read_only=True
+    )
+    fiscal_year_end = serializers.DateField(source="calc.fy.year_end", read_only=True)
+
+    class Meta:
+        model = ShuMemberPayout
+        fields = [
+            "id",
+            "fiscal_year_start",
+            "fiscal_year_end",
+            "jasa_simpanan_gross",
+            "jasa_bunga_gross",
+            "net_payout",
+            "status",
+        ]

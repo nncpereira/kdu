@@ -32,6 +32,12 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+from users.api.auth_views import (
+    CookieTokenObtainPairView,
+    CookieTokenRefreshView,
+    CookieLogoutView,
+)
+
 admin.site.site_header = "KDU Cooperative Admin"
 admin.site.site_title = "KDU Admin"
 admin.site.index_title = "Cooperative Administration"
@@ -42,10 +48,17 @@ urlpatterns = [
     # Health
     path("health/", health_check, name="health"),
     # JWT auth
-    path("api/v1/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path(
-        "api/v1/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"
+        "api/v1/auth/token/",
+        CookieTokenObtainPairView.as_view(),
+        name="token_obtain_pair",
     ),
+    path(
+        "api/v1/auth/token/refresh/",
+        CookieTokenRefreshView.as_view(),
+        name="token_refresh",
+    ),
+    path("api/v1/auth/logout/", CookieLogoutView.as_view(), name="logout"),
     path("api/v1/auth/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
     # API v1 (one include per app)
     path("api/v1/users/", include(("users.api.urls", "users"), namespace="users")),
@@ -83,6 +96,7 @@ urlpatterns = [
         name="swagger-ui",
     ),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/v1/audit/", include(("audit.api.urls", "audit"), namespace="audit")),
 ]
 
 if settings.DEBUG:

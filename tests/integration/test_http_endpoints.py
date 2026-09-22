@@ -89,6 +89,7 @@ class TestHealth:
 # Auth
 # ====================================================================
 class TestAuthHTTP:
+
     def test_obtain_token_success(self, db, maker):
         client = APIClient()
         resp = client.post(
@@ -98,7 +99,9 @@ class TestAuthHTTP:
         )
         assert resp.status_code == 200
         assert "access" in resp.data
-        assert "refresh" in resp.data
+        assert "refresh" not in resp.data  # ← refresh no longer in body
+        # Refresh token is now in a cookie.
+        assert "kdu_refresh" in resp.cookies
 
     def test_obtain_token_bad_password(self, db, maker):
         client = APIClient()
@@ -111,18 +114,16 @@ class TestAuthHTTP:
 
     def test_refresh_token(self, db, maker):
         client = APIClient()
+        # Login — cookie is captured by the test client automatically.
         r1 = client.post(
             "/api/v1/auth/token/",
             {"username": maker.user.username, "password": "testpass123"},
             format="json",
         )
-        refresh = r1.data["refresh"]
+        assert r1.status_code == 200
 
-        r2 = client.post(
-            "/api/v1/auth/token/refresh/",
-            {"refresh": refresh},
-            format="json",
-        )
+        # Refresh — the test client sends the cookie along.
+        r2 = client.post("/api/v1/auth/token/refresh/", {}, format="json")
         assert r2.status_code == 200
         assert "access" in r2.data
 
@@ -146,6 +147,26 @@ class TestAuthHTTP:
         client = APIClient()
         resp = client.get("/api/v1/users/me/")
         assert resp.status_code == 401
+
+    def test_refresh_without_cookie_fails(self, db):
+        client = APIClient()
+        resp = client.post("/api/v1/auth/token/refresh/", {}, format="json")
+        assert resp.status_code == 401
+
+    def test_logout_blacklists_refresh(self, db, maker):
+        client = APIClient()
+        client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "testpass123"},
+            format="json",
+        )
+        # Logout
+        r = client.post("/api/v1/auth/logout/", {}, format="json")
+        assert r.status_code == 200
+
+        # Cookie should be cleared; a subsequent refresh fails.
+        r2 = client.post("/api/v1/auth/token/refresh/", {}, format="json")
+        assert r2.status_code == 401
 
 
 # ====================================================================
@@ -473,6 +494,186 @@ class TestMembersHTTP:
         m = Member.objects.get(id=member_id)
         assert m.status == "Active"
         assert m.kapital_sosial_balance == Decimal("50.00")
+
+# ====================================================================
+# Members Self-Service Portal
+# ====================================================================
+class TestMemberPortalHTTP:
+    @pytest.fixture
+    def member_user(self, db, maria):
+        """
+        Create a Django auth user with role=MEMBER and link it to Maria.
+        Returns (user_profile, maria).
+        """
+        from django.contrib.auth import get_user_model
+        from users.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(
+            username=maria.membership_number,
+            password="memberpass123",
+        )
+        profile = UserProfile.objects.create(
+            user=user,
+            role=UserProfile.Role.MEMBER,
+        )
+        maria.user = user
+        maria.save(update_fields=["user"])
+        return profile
+
+    @pytest.fixture
+    def member_client(self, member_user):
+        client = APIClient()
+        token = _get_jwt(client, member_user.user.username, "memberpass123")
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        return client
+
+    def test_member_can_fetch_dashboard(self, db, member_client):
+        resp = member_client.get("/api/v1/members/me/dashboard/")
+        assert resp.status_code == 200
+        assert "member" in resp.data
+        assert "capital" in resp.data
+        assert "voluntary" in resp.data
+        assert "loans" in resp.data
+        assert "recent_activity" in resp.data
+
+    def test_member_can_fetch_profile(self, db, member_client, maria):
+        resp = member_client.get("/api/v1/members/me/")
+        assert resp.status_code == 200
+        assert resp.data["membership_number"] == maria.membership_number
+
+    def test_member_can_update_own_contact_details(self, db, member_client):
+        resp = member_client.patch(
+            "/api/v1/members/me/",
+            {"phone_number": "77009999", "profession": "Trader"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["phone_number"] == "77009999"
+        assert resp.data["profession"] == "Trader"
+
+    def test_member_cannot_edit_name(self, db, member_client):
+        """first_name is not in the editable serializer — silently ignored."""
+        resp = member_client.patch(
+            "/api/v1/members/me/",
+            {"first_name": "Hacked"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        # The name didn't change.
+        assert resp.data["first_name"] != "Hacked"
+
+    def test_member_can_fetch_savings(self, db, member_client):
+        resp = member_client.get("/api/v1/members/me/savings/")
+        assert resp.status_code == 200
+        assert "kapital_sosial_balance" in resp.data
+        assert "voluntary" in resp.data
+
+    def test_member_can_fetch_transactions(self, db, member_client):
+        resp = member_client.get("/api/v1/members/me/transactions/")
+        assert resp.status_code == 200
+        assert isinstance(resp.data, list)
+
+    def test_member_can_fetch_loans(self, db, member_client):
+        resp = member_client.get("/api/v1/members/me/loans/")
+        assert resp.status_code == 200
+        assert isinstance(resp.data, list)
+
+    def test_member_can_fetch_shu_statement(self, db, member_client):
+        resp = member_client.get("/api/v1/members/me/shu/")
+        assert resp.status_code == 200
+        assert isinstance(resp.data, list)
+
+    def test_maker_cannot_use_me_endpoints(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/members/me/dashboard/")
+        assert resp.status_code == 403
+
+    def test_member_cannot_use_staff_member_list(self, db, member_client):
+        resp = member_client.get("/api/v1/members/")
+        assert resp.status_code == 403
+
+
+class TestMemberLoginManagementHTTP:
+    def test_superadmin_creates_login(self, db, api_for, superadmin, maria):
+        # Ensure she has no login yet
+        maria.user = None
+        maria.save(update_fields=["user"])
+
+        client = api_for(superadmin)
+        resp = client.post(
+            f"/api/v1/members/{maria.id}/create-login/",
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert resp.data["login_username"] == maria.membership_number
+        assert "temporary_password" in resp.data
+        assert len(resp.data["temporary_password"]) > 0
+
+        # Confirm the link is now set
+        maria.refresh_from_db()
+        assert maria.user_id is not None
+        assert maria.user.username == maria.membership_number
+
+    def test_cannot_create_duplicate_login(self, db, api_for, superadmin, maria):
+        from django.contrib.auth import get_user_model
+        from users.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(username="KDU-000001", password="x")
+        UserProfile.objects.create(user=user, role="MEMBER")
+        maria.user = user
+        maria.save(update_fields=["user"])
+
+        client = api_for(superadmin)
+        resp = client.post(
+            f"/api/v1/members/{maria.id}/create-login/",
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "already has a login" in resp.data["detail"]
+
+    def test_maker_cannot_create_login(self, db, api_for, maker, maria):
+        client = api_for(maker)
+        resp = client.post(
+            f"/api/v1/members/{maria.id}/create-login/",
+            format="json",
+        )
+        assert resp.status_code == 403
+
+    def test_superadmin_resets_member_password(self, db, api_for, superadmin, maria):
+        from django.contrib.auth import get_user_model
+        from users.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(username="KDU-000001", password="oldpass123")
+        UserProfile.objects.create(user=user, role="MEMBER")
+        maria.user = user
+        maria.save(update_fields=["user"])
+
+        client = api_for(superadmin)
+        resp = client.post(
+            f"/api/v1/members/{maria.id}/reset-login-password/",
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert "temporary_password" in resp.data
+
+    def test_serializer_exposes_login_status(self, db, api_for, board, maria):
+        from django.contrib.auth import get_user_model
+        from users.models import UserProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(username="KDU-000001", password="x")
+        UserProfile.objects.create(user=user, role="MEMBER")
+        maria.user = user
+        maria.save(update_fields=["user"])
+
+        client = api_for(board)
+        resp = client.get(f"/api/v1/members/{maria.id}/")
+        assert resp.status_code == 200
+        assert resp.data["has_login"] is True
+        assert resp.data["login_username"] == "KDU-000001"
 
 
 # ====================================================================
@@ -1236,6 +1437,170 @@ class TestGovernanceHTTP:
         assert len(resp.data) >= 1
 
 
+class TestGovernanceValidationHTTP:
+    def _post(self, client, payload):
+        return client.post(
+            "/api/v1/governance/config/propose/",
+            payload,
+            format="json",
+        )
+
+    def test_missing_keys_rejected_with_400(self, db, api_for, maker):
+        """Regression: previously this 500'd."""
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {"reserva_legal_pct": 30},  # 3 keys missing
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400, resp.content
+        # The error should point at the missing fields.
+        assert "proposed_value" in resp.data
+
+    def test_empty_proposed_value_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {},
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_non_object_proposed_value_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": "hello",
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_art69_blocks_low_reserva_when_below_capital(
+        self, db, api_for, maker, certifier
+    ):
+        """
+        A valid-shaped split with reserva_legal_pct < 25% must be rejected
+        by Art. 69 once there is capital on the books and no reserve.
+        Should be a clean 400, never a 500.
+        """
+        from decimal import Decimal
+        from ledger.services import post_journal_entry
+
+        # Seed capital so reserva (0) < kapital (1000) is True.
+        post_journal_entry(
+            description="Seed capital for Art.69 test",
+            lines=[
+                ("1001", "DEBIT", Decimal("1000.00")),
+                ("3101", "CREDIT", Decimal("1000.00")),
+            ],
+            created_by=maker,
+            auto_certify=True,
+            certified_by=certifier,
+        )
+
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {
+                    "reserva_legal_pct": 10,  # < 25 → Art. 69 should fire
+                    "admin_fund_pct": 40,
+                    "jasa_simpanan_pct": 25,
+                    "jasa_bunga_pct": 25,  # sum = 100 → shape is valid
+                },
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400, resp.content
+        # The error should reference the legal reserve rule.
+        assert "reserva" in str(resp.data).lower() or "art" in str(resp.data).lower()
+
+    def test_sum_not_100_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {
+                    "reserva_legal_pct": 30,
+                    "admin_fund_pct": 30,
+                    "jasa_simpanan_pct": 20,
+                    "jasa_bunga_pct": 10,  # sums to 90
+                },
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_non_numeric_pct_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {
+                    "reserva_legal_pct": "abc",
+                    "admin_fund_pct": 30,
+                    "jasa_simpanan_pct": 25,
+                    "jasa_bunga_pct": 35,
+                },
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_negative_pct_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {
+                    "reserva_legal_pct": -5,
+                    "admin_fund_pct": 40,
+                    "jasa_simpanan_pct": 30,
+                    "jasa_bunga_pct": 35,
+                },
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_obligatory_cap_shape_enforced(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "obligatory_savings_monthly_cap",
+                "proposed_value": {"amount": 25},  # wrong key — should be "value"
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_loan_rate_min_greater_than_max_rejected(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "loan_interest_rate_range",
+                "proposed_value": {"min": 0.03, "max": 0.01},
+                "effective_from": "2027-01-01",
+            },
+        )
+        assert resp.status_code == 400
+
+
 # ====================================================================
 # Reports
 # ====================================================================
@@ -1602,3 +1967,165 @@ class TestReversalHTTP:
         client = api_for(maker)
         resp = client.get("/api/v1/ledger/reversals/")
         assert resp.status_code == 200
+
+
+# ====================================================================
+# AUDIT
+# ====================================================================
+class TestAuditHTTP:
+    def _seed_audit(self, actor):
+        from audit.models import AuditLog
+
+        AuditLog.objects.create(
+            actor=actor,
+            action="LOGIN_SUCCESS",
+            target_type="USER",
+            target_repr=actor.user.username,
+            description="Test login",
+        )
+        AuditLog.objects.create(
+            actor=actor,
+            action="USER_CREATED",
+            target_type="USER",
+            target_repr="newuser",
+            description="Test user creation",
+        )
+
+    def test_superadmin_can_list_audit(self, db, api_for, superadmin):
+        self._seed_audit(superadmin)
+        client = api_for(superadmin)
+        resp = client.get("/api/v1/audit/log/")
+        assert resp.status_code == 200
+        assert resp.data["count"] >= 2
+
+    def test_board_can_list_audit(self, db, api_for, superadmin, board):
+        self._seed_audit(superadmin)
+        client = api_for(board)
+        resp = client.get("/api/v1/audit/log/")
+        assert resp.status_code == 200
+
+    def test_maker_cannot_list_audit(self, db, api_for, maker):
+        client = api_for(maker)
+        resp = client.get("/api/v1/audit/log/")
+        assert resp.status_code == 403
+
+    def test_filter_by_action(self, db, api_for, superadmin):
+        self._seed_audit(superadmin)
+        client = api_for(superadmin)
+        resp = client.get("/api/v1/audit/log/?action=LOGIN_SUCCESS")
+        assert resp.status_code == 200
+        for row in resp.data["results"]:
+            assert row["action"] == "LOGIN_SUCCESS"
+
+    def test_export_csv(self, db, api_for, superadmin):
+        self._seed_audit(superadmin)
+        client = api_for(superadmin)
+        resp = client.get("/api/v1/audit/log/export/")
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+        assert b"Timestamp" in resp.content
+        assert b"LOGIN_SUCCESS" in resp.content
+
+    def test_ledger_activity_list(self, db, api_for, superadmin):
+        client = api_for(superadmin)
+        resp = client.get("/api/v1/audit/ledger/")
+        assert resp.status_code == 200
+        assert "results" in resp.data
+
+    def test_login_success_is_logged(self, db, maker):
+        """Obtaining a JWT records a LOGIN_SUCCESS audit entry."""
+        from audit.models import AuditLog
+
+        client = APIClient()
+        resp = client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "testpass123"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert AuditLog.objects.filter(
+            action="LOGIN_SUCCESS",
+            actor=maker,
+        ).exists()
+
+    def test_login_failure_is_logged(self, db, maker):
+        from audit.models import AuditLog
+
+        client = APIClient()
+        client.post(
+            "/api/v1/auth/token/",
+            {"username": maker.user.username, "password": "wrongpass"},
+            format="json",
+        )
+        assert AuditLog.objects.filter(action="LOGIN_FAILURE").exists()
+
+
+# ====================================================================
+# NOTIFICATIONS
+# ====================================================================
+class TestNotificationsHTTP:
+    def test_checker_sees_pending_check_items(self, db, api_for, maker, checker, maria):
+        maker_c = api_for(maker)
+        maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+
+        checker_c = api_for(checker)
+        resp = checker_c.get("/api/v1/audit/notifications/")
+        assert resp.status_code == 200
+        assert resp.data["count"] >= 1
+        queues = {i["queue"] for i in resp.data["items"]}
+        assert "PENDING_CHECK" in queues
+
+    def test_certifier_sees_pending_certify_items(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+        checker_c = api_for(checker)
+        checker_c.post(f"/api/v1/pipeline/{actor_id}/check/", format="json")
+
+        certifier_c = api_for(certifier)
+        resp = certifier_c.get("/api/v1/audit/notifications/")
+        assert resp.status_code == 200
+        queues = {i["queue"] for i in resp.data["items"]}
+        assert "PENDING_CERTIFY" in queues
+
+    def test_maker_sees_rejected_items(self, db, api_for, maker, checker, maria):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+
+        checker_c = api_for(checker)
+        checker_c.post(
+            f"/api/v1/pipeline/{actor_id}/reject/",
+            {"reason": "test rejection"},
+            format="json",
+        )
+
+        resp = maker_c.get("/api/v1/audit/notifications/")
+        assert resp.status_code == 200
+        queues = {i["queue"] for i in resp.data["items"]}
+        assert "REJECTED" in queues
+
+    def test_board_sees_empty_notifications(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/audit/notifications/")
+        assert resp.status_code == 200
+        assert resp.data["count"] == 0
+
+    def test_unauthenticated_returns_401(self, db):
+        client = APIClient()
+        resp = client.get("/api/v1/audit/notifications/")
+        assert resp.status_code == 401

@@ -9,17 +9,21 @@ export function ProtectedRoute({ roles }: { roles?: string[] }) {
   if (isLoading) return <Spinner />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
+  // Members are routed to the portal, never to staff pages.
+  if (profile?.role === "MEMBER") {
+    return <Navigate to="/portal/dashboard" replace />;
+  }
+
   if (roles && profile && !roles.includes(profile.role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Force password change: only /profile is allowed until the flag clears.
   if (
     profile?.must_change_password &&
     location.pathname !== "/profile"
   ) {
     return <Navigate to="/profile" replace />;
   }
-  
+
   return <Outlet />;
 }

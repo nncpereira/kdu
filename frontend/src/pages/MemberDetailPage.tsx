@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getMember } from "@/api/members";
 import { useAuth } from "@/auth/useAuth";
@@ -13,6 +13,8 @@ import { DepositModal } from "./savings/DepositModal";
 import { WithdrawModal } from "./savings/WithdrawModal";
 import { getVoluntaryBalance } from "@/api/savings";
 import { OriginateLoanModal } from "./loans/OriginateLoanModal";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { MemberLoginModal } from "./members/MemberLoginModal";
 
 export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +24,7 @@ export function MemberDetailPage() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
+  const [loginModalMode, setLoginModalMode] = useState<"create" | "reset" | null>(null);
 
   const { data: member, isLoading, isError } = useQuery({
     queryKey: ["member", id],
@@ -35,12 +38,33 @@ export function MemberDetailPage() {
   });
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+    return (
+      <div className="p-6">
+        <Breadcrumbs
+          items={[
+            { label: "Members", to: "/members" },
+            { label: "Loading…" },
+          ]}
+        />
+        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+      </div>
+    );
   }
   if (isError || !member) {
-    return <div className="p-6 text-sm text-red-600">Member not found.</div>;
+    return (
+      <div className="p-6">
+        <Breadcrumbs
+          items={[
+            { label: "Members", to: "/members" },
+            { label: "Not found" },
+          ]}
+        />
+        <p className="text-sm text-red-600">Member not found.</p>
+      </div>
+    );
   }
 
+  const isSuperadmin = profile?.role === "SUPERADMIN";
   const canMake = profile?.role === "MAKER" || profile?.role === "SUPERADMIN";
   const canPay = canMake && member.status === "Pending";
   const canExit = canMake && member.status === "Active";
@@ -56,23 +80,25 @@ export function MemberDetailPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            to="/members"
-            className="text-sm text-brand-600 hover:underline"
-          >
-            ← Back to Members
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-800 mt-2">
-            {member.full_name}
-          </h1>
-          <p className="text-sm text-gray-500 font-mono">
-            {member.membership_number}
-          </p>
-        </div>
-        <div className="text-right">
-          <Badge value={member.status} />
+      <div>
+        <Breadcrumbs
+          items={[
+            { label: "Members", to: "/members" },
+            { label: member.full_name },
+          ]}
+        />
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              {member.full_name}
+            </h1>
+            <p className="text-sm text-gray-500 font-mono">
+              {member.membership_number}
+            </p>
+          </div>
+          <div className="text-right">
+            <Badge value={member.status} />
+          </div>
         </div>
       </div>
 
@@ -99,6 +125,23 @@ export function MemberDetailPage() {
         {canMake && member.status === "Active" && (
           <Button variant="secondary" onClick={() => setLoanOpen(true)}>
             Originate Loan
+          </Button>
+        )}
+        {/* NEW: login management */}
+        {isSuperadmin && !member.has_login && (
+          <Button
+            variant="secondary"
+            onClick={() => setLoginModalMode("create")}
+          >
+            Create Login
+          </Button>
+        )}
+        {isSuperadmin && member.has_login && (
+          <Button
+            variant="secondary"
+            onClick={() => setLoginModalMode("reset")}
+          >
+            Reset Login Password
           </Button>
         )}
       </div>
@@ -174,6 +217,14 @@ export function MemberDetailPage() {
       {/* Audit */}
       <Card title="Audit">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+          <Row
+            label="Member Portal Login"
+            value={
+              member.has_login
+                ? `Active · ${member.login_username}`
+                : "Not created"
+            }
+          />
           <Row label="Created" value={formatDate(member.created_at)} />
           <Row label="Member Since" value={formatDate(member.date_joined)} />
           <Row
@@ -215,6 +266,12 @@ export function MemberDetailPage() {
         open={loanOpen}
         onClose={() => setLoanOpen(false)}
         presetMemberId={member.id}
+      />
+      <MemberLoginModal
+        member={member}
+        mode={loginModalMode ?? "create"}
+        open={loginModalMode !== null}
+        onClose={() => setLoginModalMode(null)}
       />
     </div>
   );

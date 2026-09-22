@@ -3,6 +3,7 @@ Render report HTML templates to PDF using WeasyPrint.
 """
 
 from decimal import Decimal
+import base64
 from io import BytesIO
 
 from django.template.loader import render_to_string
@@ -31,6 +32,11 @@ def render_pdf(template_name: str, context: dict) -> bytes:
     from weasyprint import HTML
 
     context.setdefault("generated_at", timezone.now().strftime("%d/%m/%Y %H:%M"))
+    from django.conf import settings
+    logo_path = settings.BASE_DIR / "static" / "img" / "kdu_logo.png"
+    if logo_path.exists():
+        encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+        context.setdefault("logo_data_uri", f"data:image/png;base64,{encoded}")
     html = render_to_string(template_name, context)
     pdf_bytes = HTML(string=html).write_pdf()
     return pdf_bytes

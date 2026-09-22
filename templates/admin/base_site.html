@@ -1,0 +1,9 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block branding %}
+  <div id="site-name" style="display:flex;align-items:center;gap:10px;">
+    <img src="{% static 'img/kdu_logo.png' %}" alt="KDU logo" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
+    <a href="{% url 'admin:index' %}">KDU Cooperative Admin</a>
+  </div>
+{% endblock %}

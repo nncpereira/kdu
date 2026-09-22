@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from users.models import UserProfile
+from audit.services import record_audit
 
 User = get_user_model()
 
@@ -12,7 +13,7 @@ User = get_user_model()
 # Staff provisioning
 # ====================================================================
 @transaction.atomic
-def create_staff_user(*, username, password, role, email="", first_name="", last_name=""):
+def create_staff_user(*, username, password, role, email="", first_name="", last_name="", actor=None, request=None):
     """
     Create a staff user plus matching UserProfile in one transaction.
     """
@@ -27,11 +28,23 @@ def create_staff_user(*, username, password, role, email="", first_name="", last
         last_name=last_name,
     )
     profile = UserProfile.objects.create(user=user, role=role)
+
+    if actor is not None:
+        record_audit(
+            actor=actor,
+            action="USER_CREATED",
+            target_type="USER",
+            target_id=profile.id,
+            target_repr=username,
+            description=f"Created {role} user: {username}",
+            metadata={"role": role, "email": email},
+            request=request,
+        )
     return profile
 
 
 @transaction.atomic
-def issue_temp_password(user) -> str:
+def issue_temp_password(user, *, actor=None, request=None) -> str:
     """
     Force a password reset on the next login and return the temporary password.
     """
@@ -42,6 +55,19 @@ def issue_temp_password(user) -> str:
     profile, _ = UserProfile.objects.get_or_create(user=user)
     profile.must_change_password = True
     profile.save(update_fields=["must_change_password"])
+
+    if actor is not None:
+        profile = getattr(user, "profile", None)
+        record_audit(
+            actor=actor,
+            action="USER_PASSWORD_RESET",
+            target_type="USER",
+            target_id=profile.id if profile else None,
+            target_repr=user.username,
+            description=f"Issued temporary password for: {user.username}",
+            request=request,
+        )
+
     return temp
 
 
@@ -80,10 +106,26 @@ def create_member_user(*, member, email="", first_name="", last_name=""):
 
 
 @transaction.atomic
-def set_staff_active(profile: UserProfile, active: bool) -> UserProfile:
+def set_staff_active(
+    profile: UserProfile, active: bool, *, actor=None, request=None
+) -> UserProfile:
     """Enable or disable a staff user's ability to log in."""
     profile.user.is_active = active
     profile.user.save(update_fields=["is_active"])
+
+    if actor is not None:
+        record_audit(
+            actor=actor,
+            action="USER_ENABLED" if active else "USER_DISABLED",
+            target_type="USER",
+            target_id=profile.id,
+            target_repr=profile.user.username,
+            description=(
+                f"{'Enabled' if active else 'Disabled'} user: "
+                f"{profile.user.username}"
+            ),
+            request=request,
+        )
     return profile
 
 
