@@ -3,11 +3,11 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from shu.models import (
-    ShuFiscalYear,
     ShuCalculation,
+    ShuFiscalYear,
     ShuMemberMonthlyBalance,
-    ShuWeightingBase,
     ShuMemberPayout,
+    ShuWeightingBase,
 )
 
 

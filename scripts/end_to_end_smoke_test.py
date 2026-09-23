@@ -1,7 +1,8 @@
 from decimal import Decimal
+
 from members.models import Member
+from pipeline.services import certify, check
 from savings.services import deposit
-from pipeline.services import check, certify
 from users.models import UserProfile
 
 maker = UserProfile.objects.get(role="MAKER")

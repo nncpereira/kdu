@@ -1,14 +1,15 @@
 from django.urls import path
+
 from shu.api.views import (
-    ShuFiscalYearListCreateView,
-    ShuFiscalYearDetailView,
-    ShuFiscalYearCalculationView,
+    ShuAggregationTriggerView,
     ShuBackfillView,
     ShuCalculateView,
     ShuCalculationDetailView,
+    ShuFiscalYearCalculationView,
+    ShuFiscalYearDetailView,
+    ShuFiscalYearListCreateView,
     ShuPayoutListView,
     ShuSnapshotTriggerView,
-    ShuAggregationTriggerView,
 )
 
 app_name = "shu"

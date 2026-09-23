@@ -2,9 +2,8 @@
 Render report HTML templates to PDF using WeasyPrint.
 """
 
-from decimal import Decimal
 import base64
-from io import BytesIO
+from decimal import Decimal
 
 from django.template.loader import render_to_string
 from django.utils import timezone

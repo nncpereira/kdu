@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,5 +8,5 @@ class LoansConfig(AppConfig):
     name = "loans"
 
     def ready(self):
-        from loans import handlers
-        from loans import summaries
+        importlib.import_module("loans.handlers")
+        importlib.import_module("loans.summaries")

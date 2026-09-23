@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,6 +8,5 @@ class SavingsConfig(AppConfig):
     name = "savings"
 
     def ready(self):
-        # Import handlers so their @register decorators run.
-        from savings import handlers
-        from savings import summaries
+        importlib.import_module("savings.handlers")
+        importlib.import_module("savings.summaries")

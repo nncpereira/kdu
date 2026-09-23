@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+
 from shu.models import ShuFiscalYear
 from shu.services.snapshot import aggregate_annual_weighting
 

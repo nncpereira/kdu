@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,5 +8,5 @@ class ExpensesConfig(AppConfig):
     name = "expenses"
 
     def ready(self):
-        from expenses import handlers
-        from expenses import summaries
+        importlib.import_module("expenses.handlers")
+        importlib.import_module("expenses.summaries")

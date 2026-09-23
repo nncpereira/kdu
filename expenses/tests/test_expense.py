@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -6,7 +7,7 @@ from accounting.models import Account
 from expenses.models import Expense
 from expenses.services import record_expense
 from ledger.services import account_net_balance
-from pipeline.services import check, certify
+from pipeline.services import certify, check
 from users.models import UserProfile
 
 User = get_user_model()

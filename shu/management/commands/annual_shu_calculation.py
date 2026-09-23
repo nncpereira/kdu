@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
 
-from shu.services.calculation import run_shu_calculation, compute_member_payouts
+from shu.services.calculation import compute_member_payouts, run_shu_calculation
 
 
 class Command(BaseCommand):

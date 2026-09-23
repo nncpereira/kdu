@@ -1,5 +1,5 @@
-from pipeline.registry import register
 from governance.models import GlobalConfigChange
+from pipeline.registry import register
 
 
 def _change(actor):

@@ -1,9 +1,10 @@
 from django.urls import path
+
 from users.views import (
-    staff_login,
-    member_login,
-    logout_session,
     change_password,
+    logout_session,
+    member_login,
+    staff_login,
 )
 
 app_name = "auth"

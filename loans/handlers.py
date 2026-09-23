@@ -27,8 +27,9 @@ def on_loan_disbursed(actor, certifier_user):
 
     # If not yet created, create + certify in one step.
     if loan.journal_entry is None:
-        from ledger.services import post_journal_entry
         from django.utils import timezone
+
+        from ledger.services import post_journal_entry
 
         je = post_journal_entry(
             description=f"Loan disbursement – {loan.id}",
@@ -51,7 +52,8 @@ def on_loan_disbursed(actor, certifier_user):
 @register("LOAN_DISBURSE", "on_reject")
 @transaction.atomic
 def on_loan_disbursement_rejected(actor, rejector_user, reason):
-    loan = Loan.objects.select_for_update().get(pk=actor.target_record_id)
+    # loan = Loan.objects.select_for_update().get(pk=actor.target_record_id)
+    pass
     # Leave as DRAFT; could optionally mark as CANCELLED.
     # (Loan model has no CANCELLED state to keep it minimal.)
 

@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,5 +8,5 @@ class LedgerConfig(AppConfig):
     name = "ledger"
 
     def ready(self):
-        from ledger import handlers
-        from ledger import summaries
+        importlib.import_module("ledger.handlers")
+        importlib.import_module("ledger.summaries")

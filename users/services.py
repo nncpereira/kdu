@@ -3,8 +3,8 @@ import secrets
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from users.models import UserProfile
 from audit.services import record_audit
+from users.models import UserProfile
 
 User = get_user_model()
 

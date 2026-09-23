@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from shu.models import ShuCalculation, ShuMemberPayout, ShuFiscalYear
+
+from shu.models import ShuCalculation, ShuFiscalYear, ShuMemberPayout
+
 
 class ShuCalculationSerializer(serializers.ModelSerializer):
     class Meta:

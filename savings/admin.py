@@ -1,6 +1,7 @@
 # savings/admin.py
 from django.contrib import admin
-from savings.models import Transaction, MemberVoluntaryDeposit
+
+from savings.models import MemberVoluntaryDeposit, Transaction
 
 
 @admin.register(Transaction)

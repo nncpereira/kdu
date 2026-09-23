@@ -1,9 +1,7 @@
 from django.db import transaction
-from django.dispatch import receiver
 
 from ledger.models import ReversalRequest
 from ledger.services import reverse_journal_entry
-from ledger.signals import journal_entry_certified
 from pipeline.registry import register
 
 

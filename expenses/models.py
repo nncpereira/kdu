@@ -1,10 +1,10 @@
 import os
 import uuid
 from datetime import date
+
 from django.db import models
 
 # Create your models here.
-from django.db import models
 from core.models import UUIDTimeStampedModel
 
 

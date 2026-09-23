@@ -1,11 +1,12 @@
 from django.urls import path
+
 from users.api.views import (
-    MeView,
     ChangePasswordView,
-    StaffUserListCreateView,
+    MeView,
     StaffUserDetailView,
     StaffUserDisableView,
     StaffUserEnableView,
+    StaffUserListCreateView,
     StaffUserResetPasswordView,
 )
 

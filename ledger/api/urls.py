@@ -1,5 +1,6 @@
 from django.urls import path
-from ledger.api.views import ReversalListCreateView, ReversalDetailView
+
+from ledger.api.views import ReversalDetailView, ReversalListCreateView
 
 app_name = "ledger"
 

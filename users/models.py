@@ -2,7 +2,6 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-
 # class UserProfileManager(models.Manager):
 #     def get_by_natural_key(self, username):
 #         return self.get(user__username=username)

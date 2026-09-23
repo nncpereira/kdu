@@ -1,14 +1,15 @@
 from django.urls import path
+
 from reports.api.views import (
-    TrialBalanceView,
-    IncomeStatementView,
-    BalanceSheetView,
-    SurplusDistributionView,
-    DashboardView,
-    TrialBalancePdfView,
-    IncomeStatementPdfView,
     BalanceSheetPdfView,
+    BalanceSheetView,
+    DashboardView,
+    IncomeStatementPdfView,
+    IncomeStatementView,
     SurplusDistributionPdfView,
+    SurplusDistributionView,
+    TrialBalancePdfView,
+    TrialBalanceView,
 )
 
 app_name = "reports"

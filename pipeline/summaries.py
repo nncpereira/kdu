@@ -5,7 +5,7 @@ summary for the Checker/Certifier UI.
 Apps register their resolvers at startup via the @register_summary decorator.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 _RESOLVERS: dict[str, Callable] = {}
 
@@ -18,7 +18,7 @@ def register_summary(transaction_type: str):
     return decorator
 
 
-def get_summary(transaction_type: str, target_record_id) -> Optional[dict]:
+def get_summary(transaction_type: str, target_record_id) -> dict | None:
     resolver = _RESOLVERS.get(transaction_type)
     if resolver is None:
         return None

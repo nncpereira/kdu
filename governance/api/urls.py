@@ -1,9 +1,10 @@
 from django.urls import path
+
 from governance.api.views import (
-    ProposeConfigChangeView,
     CertifyConfigChangeView,
-    GlobalConfigListView,
     GlobalConfigChangeListView,
+    GlobalConfigListView,
+    ProposeConfigChangeView,
 )
 
 app_name = "governance"

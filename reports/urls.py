@@ -1,9 +1,10 @@
 from django.urls import path
+
 from reports.api.views import (
-    TrialBalanceView,
-    IncomeStatementView,
     BalanceSheetView,
+    IncomeStatementView,
     SurplusDistributionView,
+    TrialBalanceView,
 )
 
 urlpatterns = [

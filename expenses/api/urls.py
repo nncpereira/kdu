@@ -1,5 +1,6 @@
 from django.urls import path
-from expenses.api.views import ExpenseListCreateView, ExpenseDetailView
+
+from expenses.api.views import ExpenseDetailView, ExpenseListCreateView
 
 app_name = "expenses"
 

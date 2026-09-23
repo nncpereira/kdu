@@ -5,16 +5,13 @@ Ledger invariants: double-entry balancing, immutability, reversal.
 from decimal import Decimal
 
 import pytest
-from django.db import IntegrityError, transaction
 
 from ledger.models import JournalEntry
 from ledger.services import (
-    post_journal_entry,
-    certify_journal_entry,
-    reverse_journal_entry,
-    account_net_balance,
     UnbalancedEntryError,
-    ImmutableEntryError,
+    account_net_balance,
+    post_journal_entry,
+    reverse_journal_entry,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.ledger]

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
-from members.models import Member, MemberOnboarding, MemberExitRequest
+from members.models import Member, MemberExitRequest, MemberOnboarding
 
 
 @admin.register(Member)

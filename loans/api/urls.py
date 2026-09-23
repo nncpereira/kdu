@@ -1,10 +1,11 @@
 from django.urls import path
+
 from loans.api.views import (
-    LoanListCreateView,
     LoanDetailView,
+    LoanListCreateView,
     ManualRepaymentView,
-    ScheduledRepaymentView,
     RepaymentListView,
+    ScheduledRepaymentView,
 )
 
 app_name = "loans"

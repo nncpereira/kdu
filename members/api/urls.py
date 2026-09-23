@@ -1,19 +1,20 @@
 from django.urls import path
-from members.api.views import (
-    MemberListCreateView,
-    MemberDetailView,
-    PayInitialCapitalView,
-    MemberExitView,
-    CreateMemberLoginView,
-    ResetMemberLoginPasswordView
-)
+
 from members.api.me_views import (
     MyDashboardView,
+    MyLoansView,
     MyProfileView,
     MySavingsView,
-    MyTransactionsView,
-    MyLoansView,
     MyShuStatementView,
+    MyTransactionsView,
+)
+from members.api.views import (
+    CreateMemberLoginView,
+    MemberDetailView,
+    MemberExitView,
+    MemberListCreateView,
+    PayInitialCapitalView,
+    ResetMemberLoginPasswordView,
 )
 
 app_name = "members"

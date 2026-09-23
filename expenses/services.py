@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -48,8 +49,6 @@ def record_expense(
     Record an operating expense. Optionally attaches a receipt file.
     Posts a DRAFT JE: Dr Expense Account, Cr Cash.
     """
-    from accounting.models import Account
-    from core.services import round_money, today
 
     payment_date = payment_date or today()
     amount = round_money(Decimal(str(amount)))

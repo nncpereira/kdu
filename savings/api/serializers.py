@@ -1,7 +1,8 @@
 from decimal import Decimal
 
 from rest_framework import serializers
-from savings.models import Transaction, MemberVoluntaryDeposit
+
+from savings.models import MemberVoluntaryDeposit, Transaction
 
 
 class TransactionSerializer(serializers.ModelSerializer):

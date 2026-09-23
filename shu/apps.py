@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,6 +8,5 @@ class ShuConfig(AppConfig):
     name = "shu"
 
     def ready(self):
-        # Register pipeline handlers on app load.
-        from shu import handlers
-        from shu import summaries
+        importlib.import_module("shu.handlers")
+        importlib.import_module("shu.summaries")

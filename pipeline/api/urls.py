@@ -1,9 +1,10 @@
 from django.urls import path
+
 from pipeline.api.views import (
-    PendingCheckListView,
-    PendingCertifyListView,
-    CheckActorView,
     CertifyActorView,
+    CheckActorView,
+    PendingCertifyListView,
+    PendingCheckListView,
     RejectActorView,
 )
 

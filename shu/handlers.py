@@ -1,6 +1,5 @@
 from django.db import transaction
 
-from ledger.services import certify_journal_entry
 from pipeline.registry import register
 from shu.models import ShuCalculation
 from shu.services.calculation import compute_member_payouts

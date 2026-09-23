@@ -1,15 +1,18 @@
 from collections import defaultdict
 from decimal import Decimal
-from django.db.models import Count, Sum
-from ledger.models import JournalTransactionLine
+
+from django.db.models import Sum
+
 from accounting.models import Account
+from ledger.models import JournalTransactionLine
 
 
 def dashboard_summary():
-    from members.models import Member
-    from savings.models import MemberVoluntaryDeposit, Transaction as SavingsTxn
     from loans.models import Loan
+    from members.models import Member
     from pipeline.models import TransactionPipelineActor
+    from savings.models import MemberVoluntaryDeposit
+    from savings.models import Transaction as SavingsTxn
 
     members_active = Member.objects.filter(status="Active").count()
     members_pending = Member.objects.filter(status="Pending").count()

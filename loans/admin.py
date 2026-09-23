@@ -1,5 +1,6 @@
 # loans/admin.py
 from django.contrib import admin
+
 from loans.models import Loan, LoanRepayment
 
 

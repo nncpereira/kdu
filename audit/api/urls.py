@@ -1,10 +1,11 @@
 from django.urls import path
+
 from audit.api.views import (
-    AuditLogListView,
     AuditLogDetailView,
     AuditLogExportView,
+    AuditLogListView,
     LedgerActivityListView,
-    NotificationsView
+    NotificationsView,
 )
 
 app_name = "audit"

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from ledger.models import JournalEntry, ReversalRequest
+from ledger.models import ReversalRequest
 
 
 class ReversalRequestSerializer(serializers.ModelSerializer):
