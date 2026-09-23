@@ -18,17 +18,14 @@ Run a single class:
 from decimal import Decimal
 
 import pytest
-
 from django.core.files.uploadedfile import SimpleUploadedFile
-
 from rest_framework.test import APIClient
 
-from conftest import checker, maker
 from expenses.models import Expense
 from governance.models import GlobalConfig, GlobalConfigChange
 from loans.models import Loan, LoanRepayment
 from members.models import Member
-from shu.models import ShuCalculation, ShuFiscalYear, ShuWeightingBase
+from shu.models import ShuCalculation
 from tests.factories import ShuFiscalYearFactory, ShuWeightingBaseFactory
 
 pytestmark = [pytest.mark.integration, pytest.mark.http]
@@ -506,6 +503,7 @@ class TestMemberPortalHTTP:
         Returns (user_profile, maria).
         """
         from django.contrib.auth import get_user_model
+
         from users.models import UserProfile
 
         User = get_user_model()
@@ -617,6 +615,7 @@ class TestMemberLoginManagementHTTP:
 
     def test_cannot_create_duplicate_login(self, db, api_for, superadmin, maria):
         from django.contrib.auth import get_user_model
+
         from users.models import UserProfile
 
         User = get_user_model()
@@ -643,6 +642,7 @@ class TestMemberLoginManagementHTTP:
 
     def test_superadmin_resets_member_password(self, db, api_for, superadmin, maria):
         from django.contrib.auth import get_user_model
+
         from users.models import UserProfile
 
         User = get_user_model()
@@ -661,6 +661,7 @@ class TestMemberLoginManagementHTTP:
 
     def test_serializer_exposes_login_status(self, db, api_for, board, maria):
         from django.contrib.auth import get_user_model
+
         from users.models import UserProfile
 
         User = get_user_model()
@@ -1170,10 +1171,11 @@ class TestShuHTTP:
         )
         assert resp.status_code == 201, resp.content
         assert resp.data["status"] == "PENDING_CHECK"
-        assert resp.data["reserva_legal_amt"] == "13046.12"
-        assert resp.data["admin_fund_amt"] == "39138.36"
+        # conftest seeds an equal 25/25/25/25 shu_split.
+        assert resp.data["reserva_legal_amt"] == "32615.30"
+        assert resp.data["admin_fund_amt"] == "32615.30"
         assert resp.data["jasa_simpanan_amt"] == "32615.30"
-        assert resp.data["jasa_bunga_amt"] == "45661.42"
+        assert resp.data["jasa_bunga_amt"] == "32615.30"
 
     def test_shu_detail(self, db, api_for, maker, board, maria):
         fy = self._seed_fy(maria)
@@ -1362,7 +1364,7 @@ class TestGovernanceHTTP:
             "/api/v1/governance/config/propose/",
             {
                 "parameter_key": "obligatory_savings_monthly_cap",
-                "proposed_value": {"value": 25},
+                "proposed_value": 25,
                 "effective_from": "2027-01-01",
             },
             format="json",
@@ -1391,7 +1393,7 @@ class TestGovernanceHTTP:
             "/api/v1/governance/config/propose/",
             {
                 "parameter_key": "obligatory_savings_monthly_cap",
-                "proposed_value": {"value": 30},
+                "proposed_value": 30,
                 "effective_from": "2027-01-01",
             },
             format="json",
@@ -1417,7 +1419,7 @@ class TestGovernanceHTTP:
             effective_from="2027-01-01",
         ).first()
         assert active is not None
-        assert active.parameter_value == {"value": 30}
+        assert active.parameter_value == 30
 
     def test_list_changes(self, db, api_for, maker, board):
         maker_c = api_for(maker)
@@ -1493,6 +1495,7 @@ class TestGovernanceValidationHTTP:
         Should be a clean 400, never a 500.
         """
         from decimal import Decimal
+
         from ledger.services import post_journal_entry
 
         # Seed capital so reserva (0) < kapital (1000) is True.
@@ -1582,7 +1585,7 @@ class TestGovernanceValidationHTTP:
             client,
             {
                 "parameter_key": "obligatory_savings_monthly_cap",
-                "proposed_value": {"amount": 25},  # wrong key — should be "value"
+                "proposed_value": {"amount": 25},  # must be a bare number, not an object
                 "effective_from": "2027-01-01",
             },
         )
@@ -1841,8 +1844,9 @@ class TestReversalHTTP:
         assert resp.data["status"] == "PENDING_CHECK"
 
     def test_cannot_reverse_draft_entry(self, db, api_for, maker, maria):
-        from ledger.services import post_journal_entry
         from decimal import Decimal
+
+        from ledger.services import post_journal_entry
 
         je = post_journal_entry(
             description="draft",
@@ -2129,3 +2133,77 @@ class TestNotificationsHTTP:
         client = APIClient()
         resp = client.get("/api/v1/audit/notifications/")
         assert resp.status_code == 401
+
+
+class TestNotFound404:
+    """Regression: plain .get(pk=...) used to 500 on missing IDs."""
+
+    BAD_UUID = "00000000-0000-0000-0000-000000000000"
+
+    def test_pipeline_actor_missing_returns_404(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.post(f"/api/v1/pipeline/{self.BAD_UUID}/check/", format="json")
+        assert resp.status_code == 404
+
+    def test_expense_missing_returns_404(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(f"/api/v1/expenses/{self.BAD_UUID}/")
+        assert resp.status_code == 404
+
+    def test_shu_fiscal_year_missing_returns_404(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(f"/api/v1/shu/fiscal-years/{self.BAD_UUID}/")
+        assert resp.status_code == 404
+
+    def test_shu_calculation_missing_returns_404(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(f"/api/v1/shu/{self.BAD_UUID}/")
+        assert resp.status_code == 404
+
+    def test_governance_change_missing_returns_404(self, db, api_for, certifier):
+        client = api_for(certifier)
+        resp = client.post(
+            f"/api/v1/governance/config/certify/{self.BAD_UUID}/",
+            format="json",
+        )
+        assert resp.status_code == 404
+
+    def test_member_missing_returns_404(self, db, api_for, checker):
+        client = api_for(checker)
+        resp = client.get(f"/api/v1/members/{self.BAD_UUID}/")
+        assert resp.status_code == 404
+
+
+class TestReportDateValidation:
+    def test_trial_balance_invalid_date_400(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/?as_of=2026-13-40")
+        assert resp.status_code == 400
+        assert "as_of" in resp.data
+
+    def test_trial_balance_missing_date_400(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/")
+        assert resp.status_code == 400
+
+    def test_trial_balance_garbage_400(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/?as_of=abc")
+        assert resp.status_code == 400
+
+    def test_income_statement_invalid_end_400(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get(
+            "/api/v1/reports/income-statement/?start=2026-01-01&end=not-a-date"
+        )
+        assert resp.status_code == 400
+
+    def test_balance_sheet_pdf_invalid_date_400(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/balance-sheet/pdf/?as_of=nope")
+        assert resp.status_code == 400
+
+    def test_valid_date_still_works(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/reports/trial-balance/?as_of=2026-06-30")
+        assert resp.status_code == 200

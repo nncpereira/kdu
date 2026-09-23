@@ -85,10 +85,10 @@ def _seed_governance():
         effective_from="2025-01-01",
         defaults={
             "parameter_value": {
-                "reserva_legal_pct": 10,
-                "admin_fund_pct": 30,
+                "reserva_legal_pct": 25,
+                "admin_fund_pct": 25,
                 "jasa_simpanan_pct": 25,
-                "jasa_bunga_pct": 35,
+                "jasa_bunga_pct": 25,
             },
             "status": "ACTIVE",
             "created_by": admin,
