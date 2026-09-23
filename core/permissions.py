@@ -38,7 +38,15 @@ class IsSuperadmin(HasRole):
 
 
 class IsBoardOrChecker(HasRole):
-    roles = {"BOARD", "CHECKER", "SUPERADMIN"}
+    """
+    Used for reports, governance config history, and the pending-check
+    queue. Includes CERTIFIER for the same reason every other
+    IsStaffRead* permission does: a Certifier reviewing a pending
+    transaction needs to read the same financial/config context a
+    Checker or Board member does.
+    """
+
+    roles = {"BOARD", "CHECKER", "CERTIFIER", "SUPERADMIN"}
 
 
 class IsMemberViewer(HasRole):
@@ -57,10 +65,13 @@ class IsStaffReadMembers(HasRole):
     """
     Roles allowed to read member records.
     Includes MAKER because the Teller needs to look up members
-    to process deposits, withdrawals, and initial capital.
+    to process deposits, withdrawals, and initial capital, and
+    CERTIFIER for the same reason every other IsStaffRead* permission
+    includes it (they review member context before certifying
+    onboarding/exit transactions).
     """
 
-    roles = {"MAKER", "BOARD", "CHECKER", "SUPERADMIN"}
+    roles = {"MAKER", "BOARD", "CHECKER", "CERTIFIER", "SUPERADMIN"}
 
 
 class IsStaffReadSavings(HasRole):
