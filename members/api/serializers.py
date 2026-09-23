@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from members.models import Member
+from members.models import Member, MemberExitRequest, MemberOnboarding
 
 
 class MemberSerializer(serializers.ModelSerializer):
@@ -91,3 +91,30 @@ class InitialCapitalSerializer(serializers.Serializer):
 
 class MemberExitSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class MemberOnboardingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MemberOnboarding
+        fields = [
+            "id",
+            "initial_capital_amount",
+            "status",
+            "created_at",
+        ]
+
+
+class MemberExitRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MemberExitRequest
+        fields = [
+            "id",
+            "refund_amount",
+            "status",
+            "created_at",
+        ]
+
+
+class MemberCapitalHistorySerializer(serializers.Serializer):
+    onboardings = MemberOnboardingSerializer(many=True)
+    exit_requests = MemberExitRequestSerializer(many=True)

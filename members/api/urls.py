@@ -10,6 +10,7 @@ from members.api.me_views import (
 )
 from members.api.views import (
     CreateMemberLoginView,
+    MemberCapitalHistoryView,
     MemberDetailView,
     MemberExitView,
     MemberListCreateView,
@@ -23,6 +24,11 @@ urlpatterns = [
     # Staff
     path("", MemberListCreateView.as_view(), name="list-create"),
     path("<uuid:pk>/", MemberDetailView.as_view(), name="detail"),
+    path(
+        "<uuid:pk>/capital-history/",
+        MemberCapitalHistoryView.as_view(),
+        name="capital-history",
+    ),
     path(
         "<uuid:pk>/initial-capital/",
         PayInitialCapitalView.as_view(),

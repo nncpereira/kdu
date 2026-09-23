@@ -9,6 +9,7 @@ from core.pagination import StandardPagination
 from core.permissions import IsMaker, IsStaffReadMembers, IsSuperadmin
 from members.api.serializers import (
     InitialCapitalSerializer,
+    MemberCapitalHistorySerializer,
     MemberCreateSerializer,
     MemberExitSerializer,
     MemberSerializer,
@@ -65,6 +66,23 @@ class MemberDetailView(APIView):
     def get(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
         return Response(MemberSerializer(member).data)
+
+
+class MemberCapitalHistoryView(APIView):
+    permission_classes = [IsStaffReadMembers]
+
+    @extend_schema(
+        responses={200: MemberCapitalHistorySerializer},
+        tags=["members"],
+        summary="Get a member's initial capital payment and exit request history",
+    )
+    def get(self, request, pk):
+        member = get_object_or_404(Member, pk=pk)
+        data = {
+            "onboardings": member.onboardings.all(),
+            "exit_requests": member.exit_requests.all(),
+        }
+        return Response(MemberCapitalHistorySerializer(data).data)
 
 
 class PayInitialCapitalView(APIView):

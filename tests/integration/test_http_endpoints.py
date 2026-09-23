@@ -492,6 +492,34 @@ class TestMembersHTTP:
         assert m.status == "Active"
         assert m.kapital_sosial_balance == Decimal("50.00")
 
+        # The initial capital payment shows up in the member's capital
+        # history, even though it's not a savings.Transaction.
+        history = maker_c.get(f"/api/v1/members/{member_id}/capital-history/")
+        assert history.status_code == 200
+        assert history.data["exit_requests"] == []
+        assert len(history.data["onboardings"]) == 1
+        onboarding = history.data["onboardings"][0]
+        assert onboarding["status"] == "COMPLETED"
+        assert onboarding["initial_capital_amount"] == "50.00"
+
+    def test_capital_history_empty_for_new_member(self, db, api_for, maker):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/members/",
+            {
+                "first_name": "New",
+                "last_name": "Member",
+                "phone_number": "77000444",
+                "date_of_birth": "1990-01-01",
+            },
+            format="json",
+        )
+        member_id = r.data["id"]
+
+        resp = maker_c.get(f"/api/v1/members/{member_id}/capital-history/")
+        assert resp.status_code == 200
+        assert resp.data == {"onboardings": [], "exit_requests": []}
+
 # ====================================================================
 # Members Self-Service Portal
 # ====================================================================

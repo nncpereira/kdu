@@ -1,17 +1,22 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getMember } from "@/api/members";
+import {
+  getMember,
+  getMemberCapitalHistory,
+  MemberCapitalHistory,
+} from "@/api/members";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
+import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PayInitialCapitalModal } from "./members/PayInitialCapitalModal";
 import { RequestExitModal } from "./members/RequestExitModal";
 import { DepositModal } from "./savings/DepositModal";
 import { WithdrawModal } from "./savings/WithdrawModal";
-import { getVoluntaryBalance } from "@/api/savings";
+import { getVoluntaryBalance, listTransactions, SavingsTransaction } from "@/api/savings";
 import { OriginateLoanModal } from "./loans/OriginateLoanModal";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { MemberLoginModal } from "./members/MemberLoginModal";
@@ -34,6 +39,16 @@ export function MemberDetailPage() {
   const voluntaryQuery = useQuery({
     queryKey: ["savings", "voluntary", id],
     queryFn: () => getVoluntaryBalance(id!),
+    enabled: !!id,
+  });
+  const historyQuery = useQuery({
+    queryKey: ["members", "capital-history", id],
+    queryFn: () => getMemberCapitalHistory(id!),
+    enabled: !!id,
+  });
+  const savingsTxnQuery = useQuery({
+    queryKey: ["savings", "transactions", id],
+    queryFn: () => listTransactions({ member: id }),
     enabled: !!id,
   });
 
@@ -189,6 +204,26 @@ export function MemberDetailPage() {
         </Card>
       </div>
 
+      {/* Transaction history */}
+      <Card title="Transaction History">
+        {(historyQuery.isLoading || savingsTxnQuery.isLoading) && (
+          <p className="text-sm text-gray-500">Loading…</p>
+        )}
+        {(historyQuery.isError || savingsTxnQuery.isError) && (
+          <p className="text-sm text-red-600">Failed to load transaction history.</p>
+        )}
+        {historyQuery.data && savingsTxnQuery.data && (
+          <TransactionHistoryTable
+            history={historyQuery.data}
+            savingsTransactions={
+              Array.isArray(savingsTxnQuery.data)
+                ? savingsTxnQuery.data
+                : savingsTxnQuery.data.results
+            }
+          />
+        )}
+      </Card>
+
       {/* Personal info */}
       <Card title="Personal Information">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
@@ -283,5 +318,55 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-gray-500">{label}</dt>
       <dd className="text-gray-800 font-medium text-right">{value}</dd>
     </div>
+  );
+}
+
+function TransactionHistoryTable({
+  history,
+  savingsTransactions,
+}: {
+  history: MemberCapitalHistory;
+  savingsTransactions: SavingsTransaction[];
+}) {
+  const rows = [
+    ...history.onboardings.map((o) => ({
+      id: o.id,
+      date: o.created_at,
+      event: "Initial Capital",
+      amount: o.initial_capital_amount,
+      status: o.status,
+    })),
+    ...history.exit_requests.map((e) => ({
+      id: e.id,
+      date: e.created_at,
+      event: "Capital Refund (Exit)",
+      amount: e.refund_amount,
+      status: e.status,
+    })),
+    ...savingsTransactions.map((t) => ({
+      id: t.id,
+      date: t.created_at,
+      event: t.transaction_type === "DEPOSIT" ? "Deposit" : "Withdrawal",
+      amount: t.requested_amount,
+      status: t.status,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return (
+    <Table
+      headers={["Date", "Event", "Amount", "Status"]}
+      empty={rows.length === 0}
+    >
+      {rows.map((row) => (
+        <tr key={row.id} className="border-b border-gray-50">
+          <td className="py-2 px-2 text-gray-600">{formatDate(row.date)}</td>
+          <td className="py-2 px-2">{row.event}</td>
+          <td className="py-2 px-2 font-medium">${formatMoney(row.amount)}</td>
+          <td className="py-2 px-2">
+            <Badge value={row.status} />
+          </td>
+        </tr>
+      ))}
+    </Table>
   );
 }

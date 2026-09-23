@@ -68,6 +68,31 @@ export interface LoginCredentials {
   detail: string;
 }
 
+export type OnboardingStatus =
+  | "PENDING_CHECK"
+  | "PENDING_CERTIFY"
+  | "COMPLETED"
+  | "REJECTED";
+
+export interface MemberOnboardingRecord {
+  id: string;
+  initial_capital_amount: string;
+  status: OnboardingStatus;
+  created_at: string;
+}
+
+export interface MemberExitRequestRecord {
+  id: string;
+  refund_amount: string;
+  status: OnboardingStatus;
+  created_at: string;
+}
+
+export interface MemberCapitalHistory {
+  onboardings: MemberOnboardingRecord[];
+  exit_requests: MemberExitRequestRecord[];
+}
+
 export async function createMemberLogin(
   memberId: string
 ): Promise<LoginCredentials> {
@@ -126,6 +151,15 @@ export async function requestMemberExit(
   const { data } = await api.post<PipelineResponse>(
     `/members/${memberId}/exit/`,
     { reason }
+  );
+  return data;
+}
+
+export async function getMemberCapitalHistory(
+  memberId: string
+): Promise<MemberCapitalHistory> {
+  const { data } = await api.get<MemberCapitalHistory>(
+    `/members/${memberId}/capital-history/`
   );
   return data;
 }
