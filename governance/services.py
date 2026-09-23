@@ -3,11 +3,10 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from audit.services import record_audit
 from core.exceptions import LegalReserveViolationError
 from governance.models import GlobalConfig, GlobalConfigChange
 from ledger.services import account_net_balance
-
-from audit.services import record_audit
 from pipeline.services import create_pipeline
 
 REQUIRED_KEYS = {
@@ -65,7 +64,7 @@ def _require_number(mapping: dict, key: str) -> Decimal:
     try:
         value = Decimal(str(raw))
     except (InvalidOperation, TypeError, ValueError):
-        raise ValidationError({key: "Must be a number."})
+        raise ValidationError({key: "Must be a number."}) from None
 
     return value
 
@@ -109,15 +108,16 @@ def validate_shu_split(proposed: dict) -> None:
             "of Social Capital (DL 76/2022 Art.69)."
         )
 
-def validate_obligatory_savings_cap(proposed: dict) -> None:
-    """Validates the {value: N} shape for obligatory_savings_monthly_cap."""
-    if not isinstance(proposed, dict):
-        raise ValidationError({"proposed_value": "Must be a JSON object."})
-    value = _require_number(proposed, "value")
+def validate_obligatory_savings_cap(proposed) -> None:
+    """Validates the plain-number shape for obligatory_savings_monthly_cap."""
+    try:
+        value = Decimal(str(proposed))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValidationError({"proposed_value": "Must be a number."}) from None
     if value < 0:
-        raise ValidationError({"value": "Must be a non-negative number."})
+        raise ValidationError({"proposed_value": "Must be a non-negative number."})
     if value > Decimal("10000"):
-        raise ValidationError({"value": "Cap seems unreasonably high."})
+        raise ValidationError({"proposed_value": "Cap seems unreasonably high."})
 
 
 def validate_loan_interest_range(proposed: dict) -> None:

@@ -1,4 +1,4 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from rest_framework import serializers
 
@@ -78,12 +78,6 @@ class ShuSplitValueSerializer(serializers.Serializer):
         return attrs
 
 
-class ObligatorySavingsCapSerializer(serializers.Serializer):
-    """Validates {value: N}."""
-
-    value = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=0)
-
-
 class LoanInterestRangeSerializer(serializers.Serializer):
     """Validates {min: X, max: Y}."""
 
@@ -101,11 +95,12 @@ class LoanInterestRangeSerializer(serializers.Serializer):
 
 
 # ====================================================================
-# Maps parameter_key -> shape serializer
+# Maps parameter_key -> shape serializer, for object-shaped values.
+# obligatory_savings_monthly_cap is a bare number, so it's validated
+# separately in ProposeChangeSerializer.validate() below.
 # ====================================================================
 SHAPE_VALIDATORS = {
     "shu_split": ShuSplitValueSerializer,
-    "obligatory_savings_monthly_cap": ObligatorySavingsCapSerializer,
     "loan_interest_rate_range": LoanInterestRangeSerializer,
 }
 
@@ -131,6 +126,15 @@ class ProposeChangeSerializer(serializers.Serializer):
         """
         key = attrs.get("parameter_key")
         value = attrs.get("proposed_value")
+
+        if key == "obligatory_savings_monthly_cap":
+            field = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=0)
+            try:
+                validated = field.run_validation(value)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"proposed_value": exc.detail}) from None
+            attrs["proposed_value"] = _normalize_json(validated)
+            return attrs
 
         validator_cls = SHAPE_VALIDATORS.get(key)
         if validator_cls is None:

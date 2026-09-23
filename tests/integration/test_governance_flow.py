@@ -8,7 +8,7 @@ import pytest
 
 from core.exceptions import LegalReserveViolationError
 from governance.models import GlobalConfig, GlobalConfigChange
-from governance.services import propose_change, certify_change
+from governance.services import certify_change, propose_change
 
 pytestmark = [pytest.mark.integration, pytest.mark.pipeline]
 
@@ -67,3 +67,30 @@ class TestGovernance:
             .first()
         )
         assert active.parameter_value == 25
+
+    def test_certified_cap_change_is_usable_by_a_real_deposit(
+        self, db, maker, checker, certifier, maria
+    ):
+        """
+        Regression test for the obligatory_savings_monthly_cap shape bug:
+        propose -> certify a new cap through the real pipeline, then make
+        sure a deposit can actually read it back without blowing up on
+        Decimal(str(cap)). Guards against the validator/serializer and the
+        consumer (savings.services._remaining_obligatory_cap) disagreeing
+        on whether the stored value is a bare number or {"value": N}.
+        """
+        from savings.services import deposit
+
+        change = propose_change(
+            parameter_key="obligatory_savings_monthly_cap",
+            proposed_value=50,
+            effective_from="2026-07-01",
+            maker_user=maker,
+        )
+        change.status = GlobalConfigChange.Status.PENDING_CERTIFY
+        change.save(update_fields=["status"])
+        certify_change(change, certifier_user=certifier)
+
+        txn = deposit(member=maria, amount=Decimal("200.00"), maker_user=maker)
+        assert txn.obligatory_portion == Decimal("50.00")
+        assert txn.voluntary_portion == Decimal("150.00")
