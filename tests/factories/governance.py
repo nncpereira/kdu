@@ -1,4 +1,5 @@
 import factory
+
 from governance.models import GlobalConfig
 
 

@@ -1,14 +1,14 @@
 from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.utils import timezone
 
 from accounting.models import Account
 from ledger.services import account_net_balance
 from loans.models import Loan
 from loans.services import originate_loan
 from members.models import Member
-from pipeline.services import check, certify
+from pipeline.services import certify, check
 from users.models import UserProfile
 
 User = get_user_model()

@@ -1,13 +1,14 @@
 from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounting.models import Account
 from core.exceptions import InsufficientBalanceError
 from members.models import Member
-from pipeline.services import check, certify, reject
-from savings.models import MemberVoluntaryDeposit, Transaction
-from savings.services import deposit, withdraw
+from pipeline.services import certify, check, reject
+from savings.models import MemberVoluntaryDeposit
+from savings.services import withdraw
 from users.models import UserProfile
 
 User = get_user_model()

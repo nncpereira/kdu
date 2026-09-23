@@ -1,11 +1,10 @@
 from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounting.models import Account
-from members.models import Member
 from members.services import onboard_member, pay_initial_capital
-from pipeline.services import check, certify
 from users.models import UserProfile
 
 User = get_user_model()
@@ -46,17 +45,3 @@ class OnboardingTests(TestCase):
             pay_initial_capital(
                 member=m, amount=Decimal("40.00"), maker_user=self.maker
             )
-
-    def test_successful_onboarding_activates_member(self):
-        m = onboard_member(
-            first_name="Maria",
-            last_name="X",
-            phone_number="8",
-            date_of_birth="1990-01-01",
-            maker_user=self.maker,
-        )
-        pay_initial_capital(member=m, amount=Decimal("50.00"), maker_user=self.maker)
-        # Simulate pipeline completion
-        actor = m.pipeline_actor if hasattr(m, "pipeline_actor") else None
-        # When the handler flow is in place, the JE certification will update
-        # capital balance and activate the member.

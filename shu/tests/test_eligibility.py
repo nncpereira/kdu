@@ -1,8 +1,9 @@
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
+
 from django.test import TestCase
 
-from shu.services.eligibility import eligible_months, compute_weighted_units
+from shu.services.eligibility import compute_weighted_units, eligible_months
 
 
 class EligibilityTests(TestCase):

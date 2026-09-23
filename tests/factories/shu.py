@@ -1,5 +1,6 @@
-import factory
 from decimal import Decimal
+
+import factory
 
 from shu.models import ShuFiscalYear, ShuWeightingBase
 

@@ -1,16 +1,17 @@
 from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounting.models import Account
 from governance.models import GlobalConfig
-from shu.models import ShuFiscalYear, ShuCalculation, ShuWeightingBase
+from members.models import Member
+from shu.models import ShuCalculation, ShuFiscalYear, ShuWeightingBase
 from shu.services.calculation import (
     calculate_shu_split,
-    run_shu_calculation,
     compute_member_payouts,
+    run_shu_calculation,
 )
-from members.models import Member
 from users.models import UserProfile
 
 User = get_user_model()

@@ -2,7 +2,7 @@
 Helpers to run a Maker-Checker-Certifier pipeline in tests.
 """
 
-from pipeline.services import check, certify, reject
+from pipeline.services import certify, check, reject
 
 
 def run_pipeline(actor, *, checker, certifier):
