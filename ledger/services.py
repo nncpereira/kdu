@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
@@ -7,6 +8,7 @@ from core.exceptions import DomainError
 from core.services import round_money
 from ledger.models import JournalEntry, JournalTransactionLine
 from ledger.signals import journal_entry_certified
+
 
 # ====================================================================
 # Exceptions

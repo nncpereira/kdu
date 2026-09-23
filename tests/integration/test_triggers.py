@@ -9,7 +9,6 @@ from django.db import connection, transaction
 
 from ledger.models import JournalEntry
 from ledger.services import post_journal_entry
-from members.models import Member
 
 pytestmark = [pytest.mark.integration, pytest.mark.trigger]
 
