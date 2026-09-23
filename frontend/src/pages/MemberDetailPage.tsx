@@ -350,6 +350,15 @@ function TransactionHistoryTable({
       amount: t.requested_amount,
       status: t.status,
     })),
+    ...history.loan_repayment_sweeps.map((s) => ({
+      id: s.id,
+      date: s.created_at,
+      event: "Loan Repayment → Savings",
+      amount: (
+        parseFloat(s.obligatory_portion) + parseFloat(s.voluntary_portion)
+      ).toFixed(2),
+      status: s.status,
+    })),
   ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
   return (

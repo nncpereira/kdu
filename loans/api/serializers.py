@@ -66,6 +66,8 @@ class LoanRepaymentSerializer(serializers.ModelSerializer):
             "loan",
             "principal_paid",
             "interest_paid",
+            "obligatory_portion",
+            "voluntary_portion",
             "payment_date",
             "mode",
             "status",

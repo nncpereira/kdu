@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
@@ -7,6 +8,7 @@ from rest_framework.views import APIView
 from audit.services import record_audit
 from core.pagination import StandardPagination
 from core.permissions import IsMaker, IsStaffReadMembers, IsSuperadmin
+from loans.models import LoanRepayment
 from members.api.serializers import (
     InitialCapitalSerializer,
     MemberCapitalHistorySerializer,
@@ -74,13 +76,20 @@ class MemberCapitalHistoryView(APIView):
     @extend_schema(
         responses={200: MemberCapitalHistorySerializer},
         tags=["members"],
-        summary="Get a member's initial capital payment and exit request history",
+        summary=(
+            "Get a member's initial capital payments, exit requests, and "
+            "any loan-repayment cash swept into their own savings"
+        ),
     )
     def get(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
+        sweeps = LoanRepayment.objects.filter(loan__member=member).filter(
+            Q(obligatory_portion__gt=0) | Q(voluntary_portion__gt=0)
+        )
         data = {
             "onboardings": member.onboardings.all(),
             "exit_requests": member.exit_requests.all(),
+            "loan_repayment_sweeps": sweeps,
         }
         return Response(MemberCapitalHistorySerializer(data).data)
 

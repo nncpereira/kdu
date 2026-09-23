@@ -518,7 +518,11 @@ class TestMembersHTTP:
 
         resp = maker_c.get(f"/api/v1/members/{member_id}/capital-history/")
         assert resp.status_code == 200
-        assert resp.data == {"onboardings": [], "exit_requests": []}
+        assert resp.data == {
+            "onboardings": [],
+            "exit_requests": [],
+            "loan_repayment_sweeps": [],
+        }
 
 # ====================================================================
 # Members Self-Service Portal
@@ -928,6 +932,21 @@ class TestLoansHTTP:
         loan = Loan.objects.get(id=loan_id)
         # 9000 - 700 = 8300
         assert loan.principal_outstanding == Decimal("8300.00")
+
+        # Cash beyond interest (180) + scheduled principal (700) = 120
+        # left over, which the waterfall sweeps into the member's own
+        # savings: 20 to the obligatory cap, the rest (100) voluntary.
+        repayment.refresh_from_db()
+        assert repayment.obligatory_portion == Decimal("20.00")
+        assert repayment.voluntary_portion == Decimal("100.00")
+
+        # And it shows up in the member's transaction/capital history.
+        history = maker_c.get(f"/api/v1/members/{maria.id}/capital-history/")
+        assert history.status_code == 200
+        sweeps = history.data["loan_repayment_sweeps"]
+        assert len(sweeps) == 1
+        assert sweeps[0]["obligatory_portion"] == "20.00"
+        assert sweeps[0]["voluntary_portion"] == "100.00"
 
     def test_scheduled_insufficient_for_interest(
         self, db, api_for, maker, checker, certifier, maria

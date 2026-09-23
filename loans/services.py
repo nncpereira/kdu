@@ -178,6 +178,8 @@ def repay_scheduled(
         loan=loan,
         principal_paid=principal_portion,
         interest_paid=interest_due,
+        obligatory_portion=obligatory_portion,
+        voluntary_portion=voluntary_portion,
         payment_date=payment_date,
         mode="SCHEDULED",
         status=LoanRepayment.Status.PENDING_CHECK,

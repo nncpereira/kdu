@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from loans.models import LoanRepayment
 from members.models import Member, MemberExitRequest, MemberOnboarding
 
 
@@ -115,6 +116,22 @@ class MemberExitRequestSerializer(serializers.ModelSerializer):
         ]
 
 
+class LoanRepaymentSweepSerializer(serializers.ModelSerializer):
+    loan_id = serializers.UUIDField(source="loan.id", read_only=True)
+
+    class Meta:
+        model = LoanRepayment
+        fields = [
+            "id",
+            "loan_id",
+            "obligatory_portion",
+            "voluntary_portion",
+            "status",
+            "created_at",
+        ]
+
+
 class MemberCapitalHistorySerializer(serializers.Serializer):
     onboardings = MemberOnboardingSerializer(many=True)
     exit_requests = MemberExitRequestSerializer(many=True)
+    loan_repayment_sweeps = LoanRepaymentSweepSerializer(many=True)

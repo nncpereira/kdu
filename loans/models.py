@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 
 from core.models import UUIDTimeStampedModel
@@ -56,6 +58,15 @@ class LoanRepayment(UUIDTimeStampedModel):
     loan = models.ForeignKey(Loan, on_delete=models.PROTECT, related_name="repayments")
     principal_paid = models.DecimalField(max_digits=18, decimal_places=2)
     interest_paid = models.DecimalField(max_digits=18, decimal_places=2)
+    # Cash beyond interest + scheduled principal that the repayment
+    # waterfall swept into the member's own savings (SCHEDULED mode
+    # only — MANUAL repayments never touch these accounts).
+    obligatory_portion = models.DecimalField(
+        max_digits=18, decimal_places=2, default=Decimal("0.00")
+    )
+    voluntary_portion = models.DecimalField(
+        max_digits=18, decimal_places=2, default=Decimal("0.00")
+    )
     payment_date = models.DateField()
     mode = models.CharField(
         max_length=20,

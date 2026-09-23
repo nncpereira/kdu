@@ -88,9 +88,26 @@ export interface MemberExitRequestRecord {
   created_at: string;
 }
 
+export type LoanRepaymentStatus =
+  | "PENDING_CHECK"
+  | "PENDING_CERTIFY"
+  | "COMPLETED"
+  | "REJECTED"
+  | "REVERSED";
+
+export interface LoanRepaymentSweepRecord {
+  id: string;
+  loan_id: string;
+  obligatory_portion: string;
+  voluntary_portion: string;
+  status: LoanRepaymentStatus;
+  created_at: string;
+}
+
 export interface MemberCapitalHistory {
   onboardings: MemberOnboardingRecord[];
   exit_requests: MemberExitRequestRecord[];
+  loan_repayment_sweeps: LoanRepaymentSweepRecord[];
 }
 
 export async function createMemberLogin(
