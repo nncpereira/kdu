@@ -1,5 +1,5 @@
-from datetime import date
 import calendar
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -12,7 +12,7 @@ from shu.models import (
     ShuMemberMonthlyBalance,
     ShuWeightingBase,
 )
-from shu.services.eligibility import eligible_months, compute_weighted_units
+from shu.services.eligibility import compute_weighted_units, eligible_months
 
 KAPITAL_SOSIAL = "3101"
 VOLUNTARY_DEPOSIT = "2101"
@@ -82,8 +82,9 @@ def backfill_snapshots(fy: ShuFiscalYear) -> int:
 @transaction.atomic
 def aggregate_annual_weighting(fy: ShuFiscalYear) -> int:
     """Recompute the per-member weighting base for a fiscal year."""
-    from loans.models import LoanRepayment
     from django.db.models import Sum
+
+    from loans.models import LoanRepayment
 
     ShuWeightingBase.objects.filter(fy=fy).delete()
 
