@@ -425,6 +425,32 @@ class TestMembersHTTP:
         for member in resp.data["results"]:
             assert member["status"] == "Active"
 
+    def test_search_members_by_name_number_and_phone(
+        self, db, api_for, checker, maria
+    ):
+        client = api_for(checker)
+
+        by_name = client.get(f"/api/v1/members/?search={maria.first_name}")
+        assert by_name.status_code == 200
+        assert any(
+            m["id"] == str(maria.id) for m in by_name.data["results"]
+        )
+
+        by_number = client.get(
+            f"/api/v1/members/?search={maria.membership_number}"
+        )
+        assert any(
+            m["id"] == str(maria.id) for m in by_number.data["results"]
+        )
+
+        by_phone = client.get(f"/api/v1/members/?search={maria.phone_number}")
+        assert any(
+            m["id"] == str(maria.id) for m in by_phone.data["results"]
+        )
+
+        no_match = client.get("/api/v1/members/?search=zzz-no-such-member")
+        assert no_match.data["count"] == 0
+
     def test_get_member_detail(self, db, api_for, checker, maria):
         client = api_for(checker)
         resp = client.get(f"/api/v1/members/{maria.id}/")
@@ -796,7 +822,7 @@ class TestSavingsHTTP:
         board_c = api_for(board)
         resp = board_c.get("/api/v1/savings/transactions/")
         assert resp.status_code == 200
-        assert len(resp.data) >= 1
+        assert resp.data["count"] >= 1
 
     def test_get_voluntary_balance(self, db, api_for, board, maria):
         # Ensure a voluntary row exists
@@ -836,6 +862,99 @@ class TestSavingsHTTP:
         client = api_for(certifier)
         resp = client.get("/api/v1/savings/transactions/")
         assert resp.status_code == 200
+
+    def test_transactions_are_paginated(self, db, api_for, board):
+        client = api_for(board)
+        resp = client.get("/api/v1/savings/transactions/")
+        assert resp.status_code == 200
+        assert set(resp.data.keys()) == {"count", "next", "previous", "results"}
+
+    def test_filter_transactions_by_membership_number(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        """
+        The filter box on the Savings page takes a membership number
+        like "KDU-000001", not the member's internal UUID.
+        """
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        _run_pipeline(checker_c, certifier_c, r.data["pipeline_actor"])
+
+        resp = maker_c.get(
+            f"/api/v1/savings/transactions/?member={maria.membership_number}"
+        )
+        assert resp.status_code == 200
+        assert resp.data["count"] >= 1
+        assert all(
+            row["member_number"] == maria.membership_number
+            for row in resp.data["results"]
+        )
+
+        # A raw UUID still works too.
+        resp2 = maker_c.get(f"/api/v1/savings/transactions/?member={maria.id}")
+        assert resp2.status_code == 200
+        assert resp2.data["count"] == resp.data["count"]
+
+    def test_loan_repayment_sweep_appears_in_transaction_list(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        r = maker_c.post(
+            "/api/v1/loans/",
+            {
+                "member": str(maria.id),
+                "principal": "9000.00",
+                "term_months": 12,
+                "monthly_rate": "0.0200",
+                "purpose": "working capital",
+            },
+            format="json",
+        )
+        loan_id = r.data["id"]
+        loan = Loan.objects.get(id=loan_id)
+        _run_pipeline(checker_c, certifier_c, str(loan.pipeline_actor_id))
+
+        # interest due = 9000 * 2% = 180; 1000 - 180 - 700 = 120 left
+        # over, swept into savings (20 obligatory + 100 voluntary).
+        rr = maker_c.post(
+            f"/api/v1/loans/{loan_id}/repay/scheduled/",
+            {"cash_amount": "1000.00", "scheduled_principal": "700.00"},
+            format="json",
+        )
+        repayment = LoanRepayment.objects.get(id=rr.data["id"])
+        _run_pipeline(checker_c, certifier_c, str(repayment.pipeline_actor_id))
+
+        resp = maker_c.get(
+            f"/api/v1/savings/transactions/?member={maria.membership_number}"
+        )
+        sweep_rows = [
+            row
+            for row in resp.data["results"]
+            if row["transaction_type"] == "LOAN_REPAYMENT_SWEEP"
+        ]
+        assert len(sweep_rows) == 1
+        assert sweep_rows[0]["requested_amount"] == "120.00"
+        assert sweep_rows[0]["obligatory_portion"] == "20.00"
+        assert sweep_rows[0]["voluntary_portion"] == "100.00"
+
+        # A DEPOSIT-only filter excludes the sweep row.
+        resp2 = maker_c.get(
+            f"/api/v1/savings/transactions/"
+            f"?member={maria.membership_number}&type=DEPOSIT"
+        )
+        assert all(
+            row["transaction_type"] == "DEPOSIT" for row in resp2.data["results"]
+        )
 
 
 # ====================================================================
@@ -1039,6 +1158,33 @@ class TestExpensesHTTP:
         resp = board_c.get("/api/v1/expenses/")
         assert resp.status_code == 200
         assert len(resp.data) >= 1
+
+    def test_filter_expenses_by_account_code(
+        self, db, api_for, maker, checker, certifier, board
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+
+        for code, desc in [("5101", "AGM venue"), ("5103", "Electricity")]:
+            r = maker_c.post(
+                "/api/v1/expenses/",
+                {
+                    "description": desc,
+                    "amount": "100.00",
+                    "expense_account_code": code,
+                    "payment_date": "2026-06-30",
+                },
+                format="json",
+            )
+            expense = Expense.objects.get(id=r.data["id"])
+            _run_pipeline(checker_c, certifier_c, str(expense.pipeline_actor_id))
+
+        board_c = api_for(board)
+        resp = board_c.get("/api/v1/expenses/?expense_account_code=5101")
+        assert resp.status_code == 200
+        assert len(resp.data) >= 1
+        assert all(e["expense_account_code"] == "5101" for e in resp.data)
 
     def test_non_expense_account_rejected(self, db, api_for, maker):
         client = api_for(maker)

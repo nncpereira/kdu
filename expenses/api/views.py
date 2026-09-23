@@ -25,6 +25,9 @@ class ExpenseListCreateView(APIView):
     )
     def get(self, request):
         qs = Expense.objects.all().order_by("-payment_date")
+        account_code = request.query_params.get("expense_account_code")
+        if account_code:
+            qs = qs.filter(expense_account_code=account_code)
         return Response(
             ExpenseSerializer(qs[:200], many=True, context={"request": request}).data
         )

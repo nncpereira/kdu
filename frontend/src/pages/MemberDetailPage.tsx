@@ -215,11 +215,12 @@ export function MemberDetailPage() {
         {historyQuery.data && savingsTxnQuery.data && (
           <TransactionHistoryTable
             history={historyQuery.data}
-            savingsTransactions={
-              Array.isArray(savingsTxnQuery.data)
-                ? savingsTxnQuery.data
-                : savingsTxnQuery.data.results
-            }
+            // Loan-repayment sweeps come from history.loan_repayment_sweeps
+            // below -- filter them out here so they don't render twice
+            // (this endpoint includes them for the org-wide Savings page).
+            savingsTransactions={savingsTxnQuery.data.results.filter(
+              (t) => t.transaction_type !== "LOAN_REPAYMENT_SWEEP"
+            )}
           />
         )}
       </Card>

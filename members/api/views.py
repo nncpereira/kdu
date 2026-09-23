@@ -37,6 +37,15 @@ class MemberListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search)
+                | Q(middle_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(membership_number__icontains=search)
+                | Q(phone_number__icontains=search)
+            )
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response(MemberSerializer(page, many=True).data)

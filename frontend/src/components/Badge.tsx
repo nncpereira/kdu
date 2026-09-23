@@ -9,6 +9,7 @@ const COLORS: Record<string, string> = {
   // savings
   DEPOSIT: "bg-emerald-100 text-emerald-800",
   WITHDRAWAL: "bg-orange-100 text-orange-800",
+  LOAN_REPAYMENT_SWEEP: "bg-purple-100 text-purple-800",
   // loans
   DISBURSED: "bg-blue-100 text-blue-800",
   DRAFT: "bg-gray-100 text-gray-800",
@@ -39,7 +40,7 @@ export function Badge({ value }: { value: string }) {
         COLORS[value] ?? "bg-gray-100 text-gray-800"
       )}
     >
-      {value.replace("_", " ")}
+      {value.replace(/_/g, " ")}
     </span>
   );
 }
