@@ -1,20 +1,21 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.pagination import StandardPagination
 from core.permissions import IsMaker, IsStaffReadLoans
 from loans.api.serializers import (
-    LoanSerializer,
     LoanOriginateSerializer,
+    LoanRepaymentSerializer,
+    LoanSerializer,
     ManualRepaymentSerializer,
     ScheduledRepaymentSerializer,
-    LoanRepaymentSerializer,
 )
 from loans.models import Loan, LoanRepayment
 from loans.services import originate_loan, repay_manual, repay_scheduled
 from members.models import Member
-from core.pagination import StandardPagination
 
 
 class LoanListCreateView(APIView):
@@ -23,15 +24,29 @@ class LoanListCreateView(APIView):
             return [IsMaker()]
         return [IsStaffReadLoans()]
 
+    @extend_schema(
+        responses={200: LoanSerializer(many=True)},
+        tags=["loans"],
+        summary="List loans",
+    )
     def get(self, request):
         qs = Loan.objects.select_related("member").order_by("-created_at")
         member_id = request.query_params.get("member")
         if member_id:
             qs = qs.filter(member_id=member_id)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response(LoanSerializer(page, many=True).data)
 
+    @extend_schema(
+        request=LoanOriginateSerializer,
+        responses={201: LoanSerializer},
+        tags=["loans"],
+        summary="Originate a loan",
+    )
     def post(self, request):
         serializer = LoanOriginateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -47,6 +62,11 @@ class LoanListCreateView(APIView):
 class LoanDetailView(APIView):
     permission_classes = [IsStaffReadLoans]
 
+    @extend_schema(
+        responses={200: LoanSerializer},
+        tags=["loans"],
+        summary="Get loan details",
+    )
     def get(self, request, pk):
         loan = get_object_or_404(Loan, pk=pk)
         return Response(LoanSerializer(loan).data)
@@ -55,6 +75,12 @@ class LoanDetailView(APIView):
 class ManualRepaymentView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=ManualRepaymentSerializer,
+        responses={201: LoanRepaymentSerializer},
+        tags=["loans"],
+        summary="Record a manual loan repayment (flexible amounts)",
+    )
     def post(self, request, pk):
         loan = get_object_or_404(Loan, pk=pk)
         serializer = ManualRepaymentSerializer(data=request.data)
@@ -72,6 +98,12 @@ class ManualRepaymentView(APIView):
 class ScheduledRepaymentView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=ScheduledRepaymentSerializer,
+        responses={201: LoanRepaymentSerializer},
+        tags=["loans"],
+        summary="Record a scheduled installment with waterfall allocation",
+    )
     def post(self, request, pk):
         loan = get_object_or_404(Loan, pk=pk)
         serializer = ScheduledRepaymentSerializer(data=request.data)
@@ -89,6 +121,11 @@ class ScheduledRepaymentView(APIView):
 class RepaymentListView(APIView):
     permission_classes = [IsStaffReadLoans]
 
+    @extend_schema(
+        responses={200: LoanRepaymentSerializer(many=True)},
+        tags=["loans"],
+        summary="List repayments for a loan",
+    )
     def get(self, request, pk):
         qs = LoanRepayment.objects.filter(loan_id=pk).order_by("-payment_date")
         return Response(LoanRepaymentSerializer(qs, many=True).data)
