@@ -1,23 +1,21 @@
+from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-from core.pagination import StandardPagination
-
-from core.permissions import IsMaker, IsStaffReadMembers, IsSuperadmin
-from members.api.serializers import (
-    MemberSerializer,
-    MemberCreateSerializer,
-    InitialCapitalSerializer,
-    MemberExitSerializer,
-)
-from members.models import Member, MemberOnboarding, MemberExitRequest
-from members.services import onboard_member, pay_initial_capital, request_exit
-
-from users.models import UserProfile
-from users.services import create_member_user, issue_temp_password
 
 from audit.services import record_audit
+from core.pagination import StandardPagination
+from core.permissions import IsMaker, IsStaffReadMembers, IsSuperadmin
+from members.api.serializers import (
+    InitialCapitalSerializer,
+    MemberCreateSerializer,
+    MemberExitSerializer,
+    MemberSerializer,
+)
+from members.models import Member
+from members.services import onboard_member, pay_initial_capital, request_exit
+from users.services import create_member_user, issue_temp_password
 
 
 class MemberListCreateView(APIView):
@@ -26,6 +24,11 @@ class MemberListCreateView(APIView):
             return [IsMaker()]
         return [IsStaffReadMembers()]
 
+    @extend_schema(
+        responses={200: MemberSerializer(many=True)},
+        tags=["members"],
+        summary="List members",
+    )
     def get(self, request):
         qs = Member.objects.all().order_by("membership_number")
         status_filter = request.query_params.get("status")
@@ -35,6 +38,12 @@ class MemberListCreateView(APIView):
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response(MemberSerializer(page, many=True).data)
 
+    @extend_schema(
+        request=MemberCreateSerializer,
+        responses={201: MemberSerializer},
+        tags=["members"],
+        summary="Onboard a new member",
+    )
     def post(self, request):
         serializer = MemberCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -48,6 +57,11 @@ class MemberListCreateView(APIView):
 class MemberDetailView(APIView):
     permission_classes = [IsStaffReadMembers]
 
+    @extend_schema(
+        responses={200: MemberSerializer},
+        tags=["members"],
+        summary="Get member details",
+    )
     def get(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
         return Response(MemberSerializer(member).data)
@@ -56,8 +70,15 @@ class MemberDetailView(APIView):
 class PayInitialCapitalView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=InitialCapitalSerializer,
+        responses={201: OpenApiResponse(description="Onboarding created.")},
+        tags=["members"],
+        summary="Pay initial capital for a PENDING member",
+    )
     def post(self, request, pk):
-        member = Member.objects.get(pk=pk)
+        # member = Member.objects.get(pk=pk)
+        member = get_object_or_404(Member, pk=pk)
         serializer = InitialCapitalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         onboarding = pay_initial_capital(
@@ -77,8 +98,15 @@ class PayInitialCapitalView(APIView):
 class MemberExitView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=MemberExitSerializer,
+        responses={201: OpenApiResponse(description="Exit request created.")},
+        tags=["members"],
+        summary="Request member exit and capital refund",
+    )
     def post(self, request, pk):
-        member = Member.objects.get(pk=pk)
+        # member = Member.objects.get(pk=pk)
+        member = get_object_or_404(Member, pk=pk)
         serializer = MemberExitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         exit_req = request_exit(member=member, maker_user=request.user.profile)
@@ -98,6 +126,14 @@ class CreateMemberLoginView(APIView):
     """
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={
+            201: OpenApiResponse(description="Login credentials returned once.")
+        },
+        tags=["members"],
+        summary="Create a portal login for a member",
+    )
     def post(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
 
@@ -143,6 +179,12 @@ class ResetMemberLoginPasswordView(APIView):
     """
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="New temporary password.")},
+        tags=["members"],
+        summary="Reset a member's portal password",
+    )
     def post(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
 
@@ -163,7 +205,7 @@ class ResetMemberLoginPasswordView(APIView):
             description=f"Reset portal password for member {member.membership_number}",
             request=request,
         )
-        
+
         return Response({
             "login_username": member.user.username,
             "temporary_password": temp,

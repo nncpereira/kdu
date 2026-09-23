@@ -1,19 +1,50 @@
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_date
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 
 from audit.api.serializers import AuditLogSerializer, LedgerActivitySerializer
 from audit.models import AuditLog
 from audit.notifications import get_notifications_for
-from core.permissions import IsBoardOrChecker, IsSuperadmin, IsAuditor, IsMaker
+from core.permissions import IsBoardOrChecker
 from ledger.models import JournalEntry
+
+
+class AuditLogListResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    limit = serializers.IntegerField()
+    results = AuditLogSerializer(many=True)
+
+
+class LedgerActivityListResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    limit = serializers.IntegerField()
+    results = LedgerActivitySerializer(many=True)
+
+
+class NotificationItemSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    kind = serializers.CharField()
+    transaction_type = serializers.CharField()
+    status = serializers.CharField()
+    label = serializers.CharField()
+    maker_username = serializers.CharField(allow_null=True)
+    updated_at = serializers.CharField()
+    link = serializers.CharField()
+
+
+class NotificationsResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    items = NotificationItemSerializer(many=True)
 
 
 # ====================================================================
@@ -74,13 +105,18 @@ def _parse_filters(request):
 class AuditLogListView(APIView):
     permission_classes = [CanReadAudit]
 
+    @extend_schema(
+        responses={200: AuditLogListResponseSerializer},
+        tags=["audit"],
+        summary="List audit log entries",
+    )
     def get(self, request):
         filters = _parse_filters(request)
         qs = AuditLog.objects.select_related("actor__user").order_by("-created_at")
 
-        if "start" in filters and filters["start"]:
+        if filters.get("start"):
             qs = qs.filter(created_at__date__gte=filters["start"])
-        if "end" in filters and filters["end"]:
+        if filters.get("end"):
             qs = qs.filter(created_at__date__lte=filters["end"])
         if "action" in filters:
             qs = qs.filter(action=filters["action"])
@@ -106,8 +142,13 @@ class AuditLogListView(APIView):
 class AuditLogDetailView(APIView):
     permission_classes = [CanReadAudit]
 
+    @extend_schema(
+        responses={200: AuditLogSerializer},
+        tags=["audit"],
+        summary="Get an audit log entry",
+    )
     def get(self, request, pk):
-        entry = AuditLog.objects.select_related("actor__user").get(pk=pk)
+        entry = get_object_or_404(AuditLog.objects.select_related("actor__user"), pk=pk)
         return Response(AuditLogSerializer(entry).data)
 
 
@@ -118,13 +159,18 @@ class AuditLogExportView(APIView):
 
     permission_classes = [CanReadAudit]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="CSV file of matching audit log entries.")},
+        tags=["audit"],
+        summary="Export audit log entries as CSV",
+    )
     def get(self, request):
         filters = _parse_filters(request)
         qs = AuditLog.objects.select_related("actor__user").order_by("-created_at")
 
-        if "start" in filters and filters["start"]:
+        if filters.get("start"):
             qs = qs.filter(created_at__date__gte=filters["start"])
-        if "end" in filters and filters["end"]:
+        if filters.get("end"):
             qs = qs.filter(created_at__date__lte=filters["end"])
         if "action" in filters:
             qs = qs.filter(action=filters["action"])
@@ -176,6 +222,11 @@ class AuditLogExportView(APIView):
 class LedgerActivityListView(APIView):
     permission_classes = [CanReadAudit]
 
+    @extend_schema(
+        responses={200: LedgerActivityListResponseSerializer},
+        tags=["audit"],
+        summary="List journal entry activity",
+    )
     def get(self, request):
         filters = _parse_filters(request)
         qs = (
@@ -189,9 +240,9 @@ class LedgerActivityListView(APIView):
             .order_by("-created_at")
         )
 
-        if "start" in filters and filters["start"]:
+        if filters.get("start"):
             qs = qs.filter(entry_date__gte=filters["start"])
-        if "end" in filters and filters["end"]:
+        if filters.get("end"):
             qs = qs.filter(entry_date__lte=filters["end"])
 
         status_filter = request.query_params.get("status")
@@ -246,6 +297,11 @@ class NotificationsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={200: NotificationsResponseSerializer},
+        tags=["audit"],
+        summary="Get the current user's actionable notifications",
+    )
     def get(self, request):
         profile = getattr(request.user, "profile", None)
         if not profile or profile.role == "MEMBER":

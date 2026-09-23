@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,18 +7,24 @@ from rest_framework.views import APIView
 from core.permissions import IsMaker, IsStaffReadSavings
 from members.models import Member
 from savings.api.serializers import (
-    TransactionSerializer,
     DepositRequestSerializer,
-    WithdrawRequestSerializer,
+    TransactionSerializer,
     VoluntaryDepositSerializer,
+    WithdrawRequestSerializer,
 )
-from savings.models import Transaction, MemberVoluntaryDeposit
+from savings.models import MemberVoluntaryDeposit, Transaction
 from savings.services import deposit, withdraw
 
 
 class DepositView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=DepositRequestSerializer,
+        responses={201: TransactionSerializer},
+        tags=["savings"],
+        summary="Record a cash deposit",
+    )
     def post(self, request):
         serializer = DepositRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -33,6 +40,12 @@ class DepositView(APIView):
 class WithdrawView(APIView):
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=WithdrawRequestSerializer,
+        responses={201: TransactionSerializer},
+        tags=["savings"],
+        summary="Record a withdrawal from voluntary deposits",
+    )
     def post(self, request):
         serializer = WithdrawRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -48,6 +61,11 @@ class WithdrawView(APIView):
 class TransactionListView(APIView):
     permission_classes = [IsStaffReadSavings]
 
+    @extend_schema(
+        responses={200: TransactionSerializer(many=True)},
+        tags=["savings"],
+        summary="List savings transactions",
+    )
     def get(self, request):
         qs = Transaction.objects.select_related("member").order_by("-created_at")
         member_id = request.query_params.get("member")
@@ -62,11 +80,16 @@ class TransactionListView(APIView):
 class MemberVoluntaryView(APIView):
     permission_classes = [IsStaffReadSavings]
 
+    @extend_schema(
+        responses={200: VoluntaryDepositSerializer},
+        tags=["savings"],
+        summary="Get a member's voluntary deposit balance",
+    )
     def get(self, request, member_id):
         member = get_object_or_404(Member, pk=member_id)
         vd = MemberVoluntaryDeposit.objects.filter(member=member).first()
+
         if vd is None:
-            # Member has never deposited; return zeros (no DB write on read).
             return Response(
                 {
                     "member": str(member.id),
@@ -75,4 +98,5 @@ class MemberVoluntaryView(APIView):
                     "updated_at": None,
                 }
             )
+
         return Response(VoluntaryDepositSerializer(vd).data)

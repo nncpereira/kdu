@@ -1,17 +1,19 @@
 from django.contrib.auth import update_session_auth_hash
-from rest_framework import status
+from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsSuperadmin
 from users.api.serializers import (
-    StaffUserSerializer,
+    ChangePasswordSerializer,
     CreateStaffUserSerializer,
+    StaffUserSerializer,
+    UpdateMyProfileSerializer,
     UpdateStaffUserSerializer,
     UserProfileSerializer,
-    ChangePasswordSerializer,
-    UpdateMyProfileSerializer,
 )
 from users.models import UserProfile
 from users.services import (
@@ -21,12 +23,33 @@ from users.services import (
     update_staff_profile,
 )
 
+
+class DetailResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class TempPasswordResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    temporary_password = serializers.CharField()
+
+
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={200: UserProfileSerializer},
+        tags=["users"],
+        summary="Get the current user's profile",
+    )
     def get(self, request):
         return Response(UserProfileSerializer(request.user.profile).data)
 
+    @extend_schema(
+        request=UpdateMyProfileSerializer,
+        responses={200: UserProfileSerializer},
+        tags=["users"],
+        summary="Update the current user's profile",
+    )
     def patch(self, request):
         serializer = UpdateMyProfileSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -47,6 +70,12 @@ class MeView(APIView):
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ChangePasswordSerializer,
+        responses={200: DetailResponseSerializer},
+        tags=["users"],
+        summary="Change the current user's password",
+    )
     def post(self, request):
         serializer = ChangePasswordSerializer(
             data=request.data, context={"request": request}
@@ -71,6 +100,11 @@ class ChangePasswordView(APIView):
 class StaffUserListCreateView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        responses={200: StaffUserSerializer(many=True)},
+        tags=["users"],
+        summary="List staff users",
+    )
     def get(self, request):
         qs = (
             UserProfile.objects.select_related("user")
@@ -79,6 +113,12 @@ class StaffUserListCreateView(APIView):
         )
         return Response(StaffUserSerializer(qs, many=True).data)
 
+    @extend_schema(
+        request=CreateStaffUserSerializer,
+        responses={201: StaffUserSerializer},
+        tags=["users"],
+        summary="Create a staff user",
+    )
     def post(self, request):
         serializer = CreateStaffUserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -107,12 +147,23 @@ class StaffUserListCreateView(APIView):
 class StaffUserDetailView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        responses={200: StaffUserSerializer},
+        tags=["users"],
+        summary="Get a staff user",
+    )
     def get(self, request, pk):
-        profile = UserProfile.objects.select_related("user").get(pk=pk)
+        profile = get_object_or_404(UserProfile.objects.select_related("user"), pk=pk)
         return Response(StaffUserSerializer(profile).data)
 
+    @extend_schema(
+        request=UpdateStaffUserSerializer,
+        responses={200: StaffUserSerializer},
+        tags=["users"],
+        summary="Update a staff user",
+    )
     def patch(self, request, pk):
-        profile = UserProfile.objects.select_related("user").get(pk=pk)
+        profile = get_object_or_404(UserProfile.objects.select_related("user"), pk=pk)
         serializer = UpdateStaffUserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         update_staff_profile(profile, **serializer.validated_data)
@@ -123,8 +174,14 @@ class StaffUserDetailView(APIView):
 class StaffUserDisableView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: StaffUserSerializer, 400: DetailResponseSerializer},
+        tags=["users"],
+        summary="Disable a staff user",
+    )
     def post(self, request, pk):
-        profile = UserProfile.objects.select_related("user").get(pk=pk)
+        profile = get_object_or_404(UserProfile.objects.select_related("user"), pk=pk)
 
         # Safety: cannot disable yourself.
         if profile.user_id == request.user.id:
@@ -146,8 +203,14 @@ class StaffUserDisableView(APIView):
 class StaffUserEnableView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: StaffUserSerializer},
+        tags=["users"],
+        summary="Re-enable a staff user",
+    )
     def post(self, request, pk):
-        profile = UserProfile.objects.select_related("user").get(pk=pk)
+        profile = get_object_or_404(UserProfile.objects.select_related("user"), pk=pk)
         set_staff_active(
             profile,
             True,
@@ -161,8 +224,14 @@ class StaffUserEnableView(APIView):
 class StaffUserResetPasswordView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: TempPasswordResponseSerializer},
+        tags=["users"],
+        summary="Issue a temporary password for a staff user",
+    )
     def post(self, request, pk):
-        profile = UserProfile.objects.select_related("user").get(pk=pk)
+        profile = get_object_or_404(UserProfile.objects.select_related("user"), pk=pk)
         temp = issue_temp_password(
             profile.user,
             actor=request.user.profile,

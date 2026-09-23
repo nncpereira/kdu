@@ -1,9 +1,11 @@
-from rest_framework import status
+from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+
 from core.permissions import IsMaker, IsStaffReadExpenses
-from expenses.api.serializers import ExpenseSerializer, ExpenseCreateSerializer
+from expenses.api.serializers import ExpenseCreateSerializer, ExpenseSerializer
 from expenses.models import Expense
 from expenses.services import record_expense
 
@@ -16,12 +18,23 @@ class ExpenseListCreateView(APIView):
             return [IsMaker()]
         return [IsStaffReadExpenses()]
 
+    @extend_schema(
+        responses={200: ExpenseSerializer(many=True)},
+        tags=["expenses"],
+        summary="List expenses",
+    )
     def get(self, request):
         qs = Expense.objects.all().order_by("-payment_date")
         return Response(
             ExpenseSerializer(qs[:200], many=True, context={"request": request}).data
         )
 
+    @extend_schema(
+        request=ExpenseCreateSerializer,
+        responses={201: ExpenseSerializer},
+        tags=["expenses"],
+        summary="Record an expense",
+    )
     def post(self, request):
         serializer = ExpenseCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -43,6 +56,11 @@ class ExpenseListCreateView(APIView):
 class ExpenseDetailView(APIView):
     permission_classes = [IsStaffReadExpenses]
 
+    @extend_schema(
+        responses={200: ExpenseSerializer},
+        tags=["expenses"],
+        summary="Get an expense",
+    )
     def get(self, request, pk):
-        expense = Expense.objects.get(pk=pk)
+        expense = get_object_or_404(Expense, pk=pk)
         return Response(ExpenseSerializer(expense, context={"request": request}).data)

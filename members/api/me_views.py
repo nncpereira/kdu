@@ -1,23 +1,23 @@
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsMember
 from loans.models import Loan
 from members.api.serializers import MemberSerializer, UpdateMyMemberSerializer
-from savings.models import MemberVoluntaryDeposit, Transaction as SavingsTxn
 from savings.api.serializers import (
     TransactionSerializer,
     VoluntaryDepositSerializer,
 )
-from shu.models import ShuMemberPayout
+from savings.models import MemberVoluntaryDeposit
+from savings.models import Transaction as SavingsTxn
 from shu.api.serializers import MyShuPayoutSerializer
+from shu.models import ShuMemberPayout
 
 
 def _get_member(request):
@@ -31,6 +31,11 @@ def _get_member(request):
 class MyDashboardView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Member dashboard summary.")},
+        tags=["member-portal"],
+        summary="Member's own dashboard",
+    )
     def get(self, request):
         member = _get_member(request)
         if not member:
@@ -96,6 +101,11 @@ class MyDashboardView(APIView):
 class MyProfileView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: MemberSerializer},
+        tags=["member-portal"],
+        summary="Member's own profile",
+    )
     def get(self, request):
         member = _get_member(request)
         if not member:
@@ -103,6 +113,12 @@ class MyProfileView(APIView):
         return Response(MemberSerializer(member).data)
 
     @transaction.atomic
+    @extend_schema(
+        request=UpdateMyMemberSerializer,
+        responses={200: MemberSerializer},
+        tags=["member-portal"],
+        summary="Update member's own contact details",
+    )
     def patch(self, request):
         member = _get_member(request)
         if not member:
@@ -126,6 +142,11 @@ class MyProfileView(APIView):
 class MySavingsView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Member Savings summary.")},
+        tags=["member-portal"],
+        summary="Member's own savings",
+    )
     def get(self, request):
         member = _get_member(request)
         if not member:
@@ -152,6 +173,11 @@ class MySavingsView(APIView):
 class MyTransactionsView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Member Transaction summary.")},
+        tags=["member-portal"],
+        summary="Member's own transactions",
+    )
     def get(self, request):
         member = _get_member(request)
         if not member:
@@ -166,6 +192,11 @@ class MyTransactionsView(APIView):
 class MyLoansView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Member Loans summary.")},
+        tags=["member-portal"],
+        summary="Member's own loans",
+    )
     def get(self, request):
         member = _get_member(request)
         if not member:
@@ -196,6 +227,11 @@ class MyLoansView(APIView):
 class MyShuStatementView(APIView):
     permission_classes = [IsMember]
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Member SHU Statement summary.")},
+        tags=["member-portal"],
+        summary="Member's own SHU statement",
+    )
     def get(self, request, year=None):
         member = _get_member(request)
         if not member:

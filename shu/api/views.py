@@ -1,40 +1,60 @@
-from rest_framework import status
+from django.core.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.core.exceptions import ValidationError
 
 from core.permissions import (
     IsMaker,
-    IsSuperadmin,
-    IsBoardOrChecker,
     IsStaffReadShu,
+    IsSuperadmin,
 )
+from pipeline.services import reject
 from shu.api.serializers import (
-    ShuCalculationSerializer,
-    ShuMemberPayoutSerializer,
-    ShuFiscalYearSerializer,
     CreateFiscalYearSerializer,
+    ShuCalculationSerializer,
+    ShuFiscalYearSerializer,
+    ShuMemberPayoutSerializer,
 )
 from shu.models import ShuCalculation, ShuFiscalYear
-from shu.services.calculation import run_shu_calculation, create_fiscal_year
-from pipeline.services import reject
+from shu.services.calculation import create_fiscal_year, run_shu_calculation
 from shu.services.snapshot import (
-    take_monthly_snapshot,
     aggregate_annual_weighting,
     backfill_snapshots,
+    take_monthly_snapshot,
 )
+
+
+class FyIdRequestSerializer(serializers.Serializer):
+    fy_id = serializers.UUIDField()
+
+
+class CalcIdRequestSerializer(serializers.Serializer):
+    calc_id = serializers.UUIDField()
 
 
 class ShuFiscalYearListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsSuperadmin()]
-        return [IsStaffReadShu()]  # ← was IsBoardOrChecker
+        return [IsStaffReadShu()]
 
+    @extend_schema(
+        responses={200: ShuFiscalYearSerializer(many=True)},
+        tags=["shu"],
+        summary="List fiscal years",
+    )
     def get(self, request):
         qs = ShuFiscalYear.objects.all().order_by("-year_start")
         return Response(ShuFiscalYearSerializer(qs, many=True).data)
 
+    @extend_schema(
+        request=CreateFiscalYearSerializer,
+        responses={201: ShuFiscalYearSerializer},
+        tags=["shu"],
+        summary="Create a fiscal year",
+    )
     def post(self, request):
         serializer = CreateFiscalYearSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -48,23 +68,31 @@ class ShuFiscalYearListCreateView(APIView):
 
 
 class ShuFiscalYearDetailView(APIView):
-    permission_classes = [IsStaffReadShu]  # ← was IsBoardOrChecker
+    permission_classes = [IsStaffReadShu]
 
+    @extend_schema(
+        responses={200: ShuFiscalYearSerializer},
+        tags=["shu"],
+        summary="Get fiscal year details",
+    )
     def get(self, request, pk):
-        fy = ShuFiscalYear.objects.get(pk=pk)
+        fy = get_object_or_404(ShuFiscalYear, pk=pk)
         return Response(ShuFiscalYearSerializer(fy).data)
 
 
 class ShuBackfillView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=FyIdRequestSerializer,
+        responses={200: OpenApiResponse(description="Rows created.")},
+        tags=["shu"],
+        summary="Backfill monthly snapshots for a fiscal year",
+    )
     def post(self, request):
-        fy_id = request.data.get("fy_id")
-        if not fy_id:
-            return Response(
-                {"detail": "fy_id is required."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        fy = ShuFiscalYear.objects.get(pk=fy_id)
+        serializer = FyIdRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fy = get_object_or_404(ShuFiscalYear, pk=serializer.validated_data["fy_id"])
         count = backfill_snapshots(fy)
         return Response({"rows_created": count})
 
@@ -73,11 +101,19 @@ class ShuBackfillView(APIView):
 # Calculation
 # ====================================================================
 class ShuCalculateView(APIView):
-    permission_classes = [IsMaker]  # now includes SUPERADMIN
+    permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=FyIdRequestSerializer,
+        responses={201: ShuCalculationSerializer},
+        tags=["shu"],
+        summary="Run the SHU calculation for a fiscal year",
+    )
     def post(self, request):
+        serializer = FyIdRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         calc = run_shu_calculation(
-            fy_id=request.data["fy_id"],
+            fy_id=serializer.validated_data["fy_id"],
             maker_user=request.user.profile,
         )
         return Response(
@@ -88,6 +124,16 @@ class ShuCalculateView(APIView):
 class ShuFiscalYearCalculationView(APIView):
     permission_classes = [IsStaffReadShu]
 
+    @extend_schema(
+        responses={
+            200: ShuCalculationSerializer,
+            204: OpenApiResponse(
+                description="No calculation exists for this fiscal year."
+            ),
+        },
+        tags=["shu"],
+        summary="Get the current calculation for a fiscal year",
+    )
     def get(self, request, fy_id):
         calc = (
             ShuCalculation.objects.filter(fy_id=fy_id)
@@ -95,16 +141,21 @@ class ShuFiscalYearCalculationView(APIView):
             .order_by("-created_at")
             .first()
         )
-        if calc is None:
+        if not calc:
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(ShuCalculationSerializer(calc).data)
 
 
 class ShuCalculationDetailView(APIView):
-    permission_classes = [IsStaffReadShu]  # ← was IsBoardOrChecker
+    permission_classes = [IsStaffReadShu]
 
+    @extend_schema(
+        responses={200: ShuCalculationSerializer},
+        tags=["shu"],
+        summary="Get calculation details",
+    )
     def get(self, request, calc_id):
-        calc = ShuCalculation.objects.get(pk=calc_id)
+        calc = get_object_or_404(ShuCalculation, pk=calc_id)
         return Response(ShuCalculationSerializer(calc).data)
 
 
@@ -113,8 +164,17 @@ class ShuCalculationCancelView(APIView):
 
     permission_classes = [IsMaker]
 
+    @extend_schema(
+        request=None,
+        responses={200: ShuCalculationSerializer},
+        tags=["shu"],
+        summary="Cancel a pending SHU calculation created by the current maker",
+    )
     def post(self, request, calc_id):
-        calc = ShuCalculation.objects.select_related("pipeline_actor", "pipeline_actor__maker").get(pk=calc_id)
+        calc = get_object_or_404(
+            ShuCalculation.objects.select_related("pipeline_actor", "pipeline_actor__maker"),
+            pk=calc_id,
+        )
         profile = request.user.profile
         if profile.role != "SUPERADMIN" and calc.pipeline_actor.maker_id != profile.id:
             return Response(
@@ -134,10 +194,15 @@ class ShuCalculationCancelView(APIView):
 
 
 class ShuPayoutListView(APIView):
-    permission_classes = [IsStaffReadShu]  # ← was IsBoardOrChecker
+    permission_classes = [IsStaffReadShu]
 
+    @extend_schema(
+        responses={200: ShuMemberPayoutSerializer(many=True)},
+        tags=["shu"],
+        summary="List member payouts for a calculation",
+    )
     def get(self, request, calc_id):
-        calc = ShuCalculation.objects.get(pk=calc_id)
+        calc = get_object_or_404(ShuCalculation, pk=calc_id)
         payouts = calc.payouts.select_related("member")
         return Response(ShuMemberPayoutSerializer(payouts, many=True).data)
 
@@ -148,6 +213,12 @@ class ShuPayoutListView(APIView):
 class ShuSnapshotTriggerView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="Rows created.")},
+        tags=["shu"],
+        summary="Trigger a monthly snapshot now",
+    )
     def post(self, request):
         count = take_monthly_snapshot()
         return Response({"rows_created": count})
@@ -156,7 +227,15 @@ class ShuSnapshotTriggerView(APIView):
 class ShuAggregationTriggerView(APIView):
     permission_classes = [IsSuperadmin]
 
+    @extend_schema(
+        request=FyIdRequestSerializer,
+        responses={200: OpenApiResponse(description="Rows created.")},
+        tags=["shu"],
+        summary="Aggregate annual weighting for a fiscal year",
+    )
     def post(self, request):
-        fy = ShuFiscalYear.objects.get(pk=request.data["fy_id"])
+        serializer = FyIdRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fy = get_object_or_404(ShuFiscalYear, pk=serializer.validated_data["fy_id"])
         count = aggregate_annual_weighting(fy)
         return Response({"rows_created": count})

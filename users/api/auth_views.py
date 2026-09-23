@@ -1,7 +1,8 @@
 from django.conf import settings
-from rest_framework import status
-from rest_framework.response import Response
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
+from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -9,6 +10,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import record_audit
+
+
+class AccessTokenResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+
+class LogoutResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
 
 REFRESH_COOKIE_NAME = "kdu_refresh"
 REFRESH_COOKIE_PATH = "/api/v1/auth/"
@@ -102,6 +111,15 @@ class CookieTokenRefreshView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: AccessTokenResponseSerializer,
+            401: OpenApiResponse(description="No refresh cookie, or it's invalid/expired."),
+        },
+        tags=["auth"],
+        summary="Refresh the access token using the HttpOnly refresh cookie",
+    )
     def post(self, request):
         raw = request.COOKIES.get(REFRESH_COOKIE_NAME)
         if not raw:
@@ -113,7 +131,7 @@ class CookieTokenRefreshView(APIView):
         serializer = TokenRefreshSerializer(data={"refresh": raw})
         try:
             serializer.is_valid(raise_exception=True)
-        except Exception as e:
+        except Exception:
             response = Response(
                 {"detail": "Invalid or expired refresh token."},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -137,6 +155,12 @@ class CookieLogoutView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    @extend_schema(
+        request=None,
+        responses={200: LogoutResponseSerializer},
+        tags=["auth"],
+        summary="Blacklist the refresh token and clear the refresh cookie",
+    )
     def post(self, request):
         raw = request.COOKIES.get(REFRESH_COOKIE_NAME)
         if raw:
