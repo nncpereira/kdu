@@ -94,3 +94,43 @@ class TestGovernance:
         txn = deposit(member=maria, amount=Decimal("200.00"), maker_user=maker)
         assert txn.obligatory_portion == Decimal("50.00")
         assert txn.voluntary_portion == Decimal("150.00")
+
+    def test_certify_via_the_real_pipeline_applies_the_change(
+        self, db, maker, checker, certifier
+    ):
+        """
+        Regression test: every other domain (loans, savings, shu, members,
+        expenses) registers an on_certify handler so that certifying via
+        the generic pipeline endpoint (what the Pipeline page's Certify
+        button actually calls) performs the real domain action.
+        governance/handlers.py was missing on_certify entirely, so
+        certifying a config change there completed the pipeline actor but
+        left the GlobalConfigChange stuck at PENDING_CERTIFY forever and
+        never wrote the new value to GlobalConfig -- invisible in the
+        Pipeline queue (already COMPLETED) and stuck on the Governance
+        page (never CERTIFIED). All the other tests in this file call
+        certify_change() directly, which is why this went unnoticed.
+        """
+        from tests.helpers import full_pipeline
+
+        change = propose_change(
+            parameter_key="obligatory_savings_monthly_cap",
+            proposed_value=40,
+            effective_from="2026-07-01",
+            maker_user=maker,
+        )
+
+        full_pipeline(change, checker=checker, certifier=certifier)
+
+        change.refresh_from_db()
+        assert change.status == GlobalConfigChange.Status.CERTIFIED
+
+        active = (
+            GlobalConfig.objects.filter(
+                parameter_key="obligatory_savings_monthly_cap",
+                status="ACTIVE",
+            )
+            .order_by("-effective_from")
+            .first()
+        )
+        assert active.parameter_value == 40
