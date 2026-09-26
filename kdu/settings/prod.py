@@ -3,8 +3,13 @@ Production settings — security hardened.
 """
 
 import os
+from pathlib import Path
 
-from .base import *
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env.prod")
+
+from .base import *  # noqa: E402
 
 DEBUG = False
 

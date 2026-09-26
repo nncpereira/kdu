@@ -14,8 +14,6 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 # Django 5.0's BaseContext.__copy__ calls object.__copy__, which was removed
 # from Python 3.14. Keep the supported Django version working on Python 3.14.
 if sys.version_info >= (3, 14):
@@ -44,8 +42,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 # ====================================================================
 # Environment
 # ====================================================================
-# Load environment variables from .env
-load_dotenv(BASE_DIR / ".env")
+# The .env file itself is loaded by the environment-specific module
+# (dev.py / test.py load .env, prod.py loads .env.prod) before this
+# module runs, so os.environ is already populated below.
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -105,6 +104,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.RestrictDjangoAdminMiddleware",
 ]
 
 # ====================================================================

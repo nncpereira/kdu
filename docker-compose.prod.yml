@@ -4,15 +4,16 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    env_file: .env.prod
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      # $$ (not ${...}) so this is expanded by the container's shell from
+      # its own env (set via env_file above), not by Compose's own
+      # variable interpolation, which always reads the root-level .env
+      # regardless of env_file and would silently pull dev creds here.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +25,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.prod
     depends_on:
       db:
         condition: service_healthy

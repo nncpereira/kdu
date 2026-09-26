@@ -1,0 +1,34 @@
+# Secrets — never bake these into an image layer
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# VCS / tooling
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Frontend (Dockerfile.frontend copies frontend/ separately)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Django runtime artifacts
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# OS
+.DS_Store
