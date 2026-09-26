@@ -1,6 +1,7 @@
+from django.contrib.auth import login as django_login
 from django.contrib.auth import update_session_auth_hash
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -243,3 +244,26 @@ class StaffUserResetPasswordView(APIView):
                 "temporary_password": temp,
             }
         )
+
+
+class AdminSessionGrantView(APIView):
+    """
+    Bridges the SPA's JWT auth into a Django session so the browser can
+    load /admin/, which has no login page of its own and 404s for anyone
+    without a superadmin session (see core.middleware.RestrictDjangoAdminMiddleware).
+    """
+    permission_classes = [IsSuperadmin]
+
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="Admin session granted.")},
+        tags=["users"],
+        summary="Grant the current superadmin a Django admin session",
+    )
+    def post(self, request):
+        django_login(
+            request,
+            request.user,
+            backend="django.contrib.auth.backends.ModelBackend",
+        )
+        return Response({"detail": "Admin session granted."})

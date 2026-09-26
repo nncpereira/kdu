@@ -39,6 +39,20 @@ admin.site.site_header = "KDU Cooperative Admin"
 admin.site.site_title = "KDU Admin"
 admin.site.index_title = "Cooperative Administration"
 
+
+def _admin_has_permission(request):
+    """
+    Replace Django's default is_staff/is_superuser gate with our own
+    SUPERADMIN role check. Paired with core.middleware.RestrictDjangoAdminMiddleware,
+    which 404s the whole /admin/ prefix for anyone this rejects.
+    """
+    user = request.user
+    profile = getattr(user, "profile", None)
+    return bool(user.is_active and profile and profile.role == "SUPERADMIN")
+
+
+admin.site.has_permission = _admin_has_permission
+
 urlpatterns = [
     # Django admin (with custom SHU calculator page)
     path("admin/", admin.site.urls),

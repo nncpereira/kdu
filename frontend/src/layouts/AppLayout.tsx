@@ -1,8 +1,10 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import clsx from "clsx";
+import { toast } from "sonner";
 import { useAuth } from "@/auth/useAuth";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/NotificationBell";
+import { grantAdminSession } from "@/api/users";
 
 const NAV: { to: string; label: string; roles?: string | string[] }[] = [
   { to: "/dashboard", label: "Dashboard" },
@@ -104,6 +106,21 @@ export function AppLayout() {
           >
             Log out
           </button>
+          {profile?.role === "SUPERADMIN" && (
+            <button
+              onClick={async () => {
+                try {
+                  await grantAdminSession();
+                  window.open("/admin/", "_blank", "noopener,noreferrer");
+                } catch {
+                  toast.error("Could not open Django admin.");
+                }
+              }}
+              className="block w-full text-left px-5 pb-2.5 text-[10px] text-brand-300 hover:text-brand-100 transition-colors"
+            >
+              Django Admin ↗
+            </button>
+          )}
         </div>
       </aside>
 

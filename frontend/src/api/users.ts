@@ -126,3 +126,7 @@ export async function updateMyProfile(payload: {
   const { data } = await api.patch<Profile>("/users/me/", payload);
   return data;
 }
+
+export async function grantAdminSession(): Promise<void> {
+  await api.post("/users/admin-session/");
+}

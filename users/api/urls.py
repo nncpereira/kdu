@@ -1,6 +1,7 @@
 from django.urls import path
 
 from users.api.views import (
+    AdminSessionGrantView,
     ChangePasswordView,
     MeView,
     StaffUserDetailView,
@@ -16,6 +17,9 @@ urlpatterns = [
     # Self-service
     path("me/", MeView.as_view(), name="me"),
     path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path(
+        "admin-session/", AdminSessionGrantView.as_view(), name="admin-session-grant"
+    ),
     # Superadmin staff management
     path("", StaffUserListCreateView.as_view(), name="staff-list-create"),
     path("<int:pk>/", StaffUserDetailView.as_view(), name="staff-detail"),
