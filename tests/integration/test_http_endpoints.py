@@ -662,14 +662,26 @@ class TestMemberLoginManagementHTTP:
             format="json",
         )
         assert resp.status_code == 201, resp.content
-        assert resp.data["login_username"] == maria.membership_number
+        assert resp.data["login_username"] == "maria.test"
         assert "temporary_password" in resp.data
         assert len(resp.data["temporary_password"]) > 0
 
         # Confirm the link is now set
         maria.refresh_from_db()
         assert maria.user_id is not None
-        assert maria.user.username == maria.membership_number
+        assert maria.user.username == "maria.test"
+
+    def test_duplicate_name_gets_suffixed_username(
+        self, db, api_for, superadmin, maria, member_factory
+    ):
+        twin = member_factory(first_name="Maria", last_name="Test")
+
+        client = api_for(superadmin)
+        resp1 = client.post(f"/api/v1/members/{maria.id}/create-login/", format="json")
+        resp2 = client.post(f"/api/v1/members/{twin.id}/create-login/", format="json")
+
+        assert resp1.data["login_username"] == "maria.test"
+        assert resp2.data["login_username"] == "maria.test2"
 
     def test_cannot_create_duplicate_login(self, db, api_for, superadmin, maria):
         from django.contrib.auth import get_user_model
@@ -733,6 +745,37 @@ class TestMemberLoginManagementHTTP:
         assert resp.status_code == 200
         assert resp.data["has_login"] is True
         assert resp.data["login_username"] == "KDU-000001"
+
+
+class TestDjangoAdminAccessHTTP:
+    def test_anonymous_gets_404_not_a_login_page(self, db, client):
+        resp = client.get("/admin/")
+        assert resp.status_code == 404
+
+    def test_non_superadmin_staff_gets_404_even_with_a_session(
+        self, db, client, maker
+    ):
+        client.force_login(maker.user)
+        resp = client.get("/admin/")
+        assert resp.status_code == 404
+
+    def test_grant_endpoint_rejects_non_superadmin(self, db, api_for, maker):
+        resp = api_for(maker).post("/api/v1/users/admin-session/", format="json")
+        assert resp.status_code == 403
+
+    def test_grant_endpoint_rejects_anonymous(self, db):
+        resp = APIClient().post("/api/v1/users/admin-session/", format="json")
+        assert resp.status_code == 401
+
+    def test_superadmin_can_grant_a_session_and_reach_admin(
+        self, db, api_for, superadmin
+    ):
+        client = api_for(superadmin)
+        grant = client.post("/api/v1/users/admin-session/", format="json")
+        assert grant.status_code == 200
+
+        resp = client.get("/admin/")
+        assert resp.status_code == 200
 
 
 # ====================================================================
