@@ -1,4 +1,6 @@
+import re
 import secrets
+import unicodedata
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -7,6 +9,31 @@ from audit.services import record_audit
 from users.models import UserProfile
 
 User = get_user_model()
+
+
+def _slugify_name_part(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z]", "", value.lower())
+
+
+def _generate_member_username(member) -> str:
+    """
+    Build a human-readable username from the member's name, e.g.
+    "joao.soares". Falls back to the membership number if the name
+    doesn't yield any usable characters. Appends a numeric suffix on
+    collision.
+    """
+    first = _slugify_name_part(member.first_name)
+    last = _slugify_name_part(member.last_name)
+    base = f"{first}.{last}" if first and last else first or last
+    base = base or member.membership_number.lower()
+
+    username = base
+    suffix = 1
+    while User.objects.filter(username=username).exists():
+        suffix += 1
+        username = f"{base}{suffix}"
+    return username
 
 
 # ====================================================================
@@ -78,13 +105,10 @@ def issue_temp_password(user, *, actor=None, request=None) -> str:
 def create_member_user(*, member, email="", first_name="", last_name=""):
     """
     Create a MEMBER-role auth user for a member.
-    Username is the membership number; a temp password is generated.
+    Username is derived from the member's name (e.g. "joao.soares");
+    a temp password is generated.
     """
-    username = member.membership_number
-
-    # Uniqueness guard
-    if User.objects.filter(username=username).exists():
-        username = f"{username}-{secrets.token_hex(3)}"
+    username = _generate_member_username(member)
 
     temp = secrets.token_urlsafe(10)
     user = User.objects.create_user(

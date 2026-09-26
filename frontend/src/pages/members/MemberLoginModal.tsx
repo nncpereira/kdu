@@ -82,10 +82,10 @@ export function MemberLoginModal({ member, mode, open, onClose }: Props) {
             <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded p-3">
               <p className="font-medium mb-1">What this does</p>
               <p>
-                Creates a member portal login with the username{" "}
-                <span className="font-mono">{member.membership_number}</span>{" "}
-                and a random temporary password. The member is required to
-                change the password on first sign-in.
+                Creates a member portal login with a username derived from
+                the member's name and a random temporary password. The
+                member is required to change the password on first
+                sign-in.
               </p>
             </div>
           ) : (
