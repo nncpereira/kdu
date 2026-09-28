@@ -41,6 +41,7 @@ class TransactionPipelineActor(UUIDTimeStampedModel):
         blank=True,
     )
     rejection_reason = models.TextField(blank=True, default="")
+    rejection_acknowledged_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-updated_at"]

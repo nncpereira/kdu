@@ -91,6 +91,7 @@ def get_notifications_for(profile) -> list[dict]:
             status=TransactionPipelineActor.Status.REJECTED,
             updated_at__gte=cutoff,
             transaction_type__in=USER_FACING_TYPES,
+            rejection_acknowledged_at__isnull=True,
         ).order_by("-updated_at")[:20]
         for actor in rejected:
             item = _actor_to_item(actor)

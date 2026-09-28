@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from pipeline.models import TransactionPipelineActor
 from pipeline.registry import get_handlers
@@ -86,4 +87,23 @@ def reject(actor: TransactionPipelineActor, rejector_user, reason: str=""):
 
     for handler in get_handlers(actor.transaction_type, "on_reject"):
         handler(actor, rejector_user, reason)
+    return actor
+
+
+# ====================================================================
+# Acknowledge a rejection notification
+# ====================================================================
+@transaction.atomic
+def acknowledge_rejection(actor: TransactionPipelineActor, profile):
+    """
+    Dismiss a rejected actor from the maker's notification bell. Only the
+    maker whose submission was rejected can dismiss it.
+    """
+    if actor.maker_id != profile.id:
+        raise ValidationError("Only the maker can dismiss this notification.")
+    if actor.status != TransactionPipelineActor.Status.REJECTED:
+        raise ValidationError("Only a rejected actor can be dismissed.")
+
+    actor.rejection_acknowledged_at = timezone.now()
+    actor.save(update_fields=["rejection_acknowledged_at", "updated_at"])
     return actor

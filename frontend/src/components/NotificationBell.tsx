@@ -1,18 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { getNotifications, Notification } from "@/api/notifications";
+import {
+  dismissNotification,
+  getNotifications,
+  Notification,
+} from "@/api/notifications";
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
 
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: getNotifications,
     refetchInterval: 60_000,          // refresh every minute
     refetchOnWindowFocus: true,
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: dismissNotification,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const count = data?.count ?? 0;
@@ -101,6 +111,11 @@ export function NotificationBell() {
                   <NotificationItem
                     item={item}
                     onNavigate={() => setOpen(false)}
+                    onDismiss={
+                      item.queue === "REJECTED"
+                        ? () => dismissMutation.mutate(item.id)
+                        : undefined
+                    }
                   />
                 </li>
               ))}
@@ -115,45 +130,60 @@ export function NotificationBell() {
 function NotificationItem({
   item,
   onNavigate,
+  onDismiss,
 }: {
   item: Notification;
   onNavigate: () => void;
+  onDismiss?: () => void;
 }) {
   const isRejected = item.queue === "REJECTED";
 
   return (
-    <Link
-      to={item.link}
-      onClick={onNavigate}
+    <div
       className={clsx(
-        "block px-4 py-3 hover:bg-gray-50 transition-colors",
+        "flex items-start px-4 py-3 hover:bg-gray-50 transition-colors",
         isRejected && "border-l-4 border-red-500 pl-3"
       )}
     >
-      <div className="flex items-start gap-3">
-        <QueueIcon queue={item.queue} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800 line-clamp-2">
-            {item.label}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {item.transaction_type.replace("_", " ")}
-            {item.maker_username && ` · by ${item.maker_username}`}
-          </p>
-          {isRejected && item.reason && (
-            <p className="text-xs text-red-600 mt-1 italic truncate">
-              "{item.reason}"
+      <Link to={item.link} onClick={onNavigate} className="flex-1 min-w-0">
+        <div className="flex items-start gap-3">
+          <QueueIcon queue={item.queue} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 line-clamp-2">
+              {item.label}
             </p>
-          )}
-          {!isRejected && item.action && (
-            <p className="text-xs text-gray-400 mt-1">{item.action}</p>
-          )}
+            <p className="text-xs text-gray-500 mt-0.5">
+              {item.transaction_type.replace("_", " ")}
+              {item.maker_username && ` · by ${item.maker_username}`}
+            </p>
+            {isRejected && item.reason && (
+              <p className="text-xs text-red-600 mt-1 italic truncate">
+                "{item.reason}"
+              </p>
+            )}
+            {!isRejected && item.action && (
+              <p className="text-xs text-gray-400 mt-1">{item.action}</p>
+            )}
+          </div>
+          <p className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">
+            {timeAgo(item.updated_at)}
+          </p>
         </div>
-        <p className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">
-          {timeAgo(item.updated_at)}
-        </p>
-      </div>
-    </Link>
+      </Link>
+      {onDismiss && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDismiss();
+          }}
+          aria-label="Dismiss notification"
+          className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 

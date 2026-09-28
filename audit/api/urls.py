@@ -4,6 +4,7 @@ from audit.api.views import (
     AuditLogDetailView,
     AuditLogExportView,
     AuditLogListView,
+    DismissNotificationView,
     LedgerActivityListView,
     NotificationsView,
 )
@@ -16,4 +17,9 @@ urlpatterns = [
     path("log/<uuid:pk>/", AuditLogDetailView.as_view(), name="log-detail"),
     path("ledger/", LedgerActivityListView.as_view(), name="ledger-list"),
     path("notifications/", NotificationsView.as_view(), name="notifications"),
+    path(
+        "notifications/<uuid:pk>/dismiss/",
+        DismissNotificationView.as_view(),
+        name="notifications-dismiss",
+    ),
 ]

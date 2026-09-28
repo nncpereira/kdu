@@ -30,3 +30,7 @@ export async function getNotifications(): Promise<NotificationsResponse> {
   );
   return data;
 }
+
+export async function dismissNotification(id: string): Promise<void> {
+  await api.post(`/audit/notifications/${id}/dismiss/`);
+}

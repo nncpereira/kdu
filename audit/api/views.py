@@ -17,6 +17,8 @@ from audit.models import AuditLog
 from audit.notifications import get_notifications_for
 from core.permissions import IsBoardOrChecker
 from ledger.models import JournalEntry
+from pipeline.models import TransactionPipelineActor
+from pipeline.services import acknowledge_rejection
 
 
 class AuditLogListResponseSerializer(serializers.Serializer):
@@ -314,3 +316,24 @@ class NotificationsView(APIView):
                 "items": items,
             }
         )
+
+
+class DismissNotificationView(APIView):
+    """Dismiss a rejected-submission notification from the maker's bell."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="Notification dismissed.")},
+        tags=["audit"],
+        summary="Dismiss a rejected-submission notification",
+    )
+    def post(self, request, pk):
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return Response({"detail": "No profile."}, status=403)
+
+        actor = get_object_or_404(TransactionPipelineActor, pk=pk)
+        acknowledge_rejection(actor, profile)
+        return Response({"detail": "Dismissed."})
