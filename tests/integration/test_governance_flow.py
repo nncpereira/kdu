@@ -5,8 +5,8 @@ Governance change workflow through the pipeline.
 from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
 
-from core.exceptions import LegalReserveViolationError
 from governance.models import GlobalConfig, GlobalConfigChange
 from governance.services import certify_change, propose_change
 
@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.pipeline]
 
 
 class TestGovernance:
-    def test_propose_shu_split_below_25_when_reserve_lt_capital(self, db, maker):
+    def test_propose_shu_split_at_10pct_warns_but_does_not_block(self, db, maker):
         # Reserve (0) < capital (0 default) → not triggered, so this test
         # needs capital > reserve to trigger the guard.
         from ledger.services import post_journal_entry
@@ -31,13 +31,42 @@ class TestGovernance:
             certified_by=maker,
         )
 
-        with pytest.raises(LegalReserveViolationError):
+        change = propose_change(
+            parameter_key="shu_split",
+            proposed_value={
+                "reserva_legal_pct": 10,
+                "admin_fund_pct": 30,
+                "jasa_simpanan_pct": 25,
+                "jasa_bunga_pct": 35,
+            },
+            effective_from="2026-07-01",
+            maker_user=maker,
+        )
+        assert change.status == GlobalConfigChange.Status.PENDING_CHECK
+        assert len(change.warnings) == 1
+        assert "25%" in change.warnings[0]
+
+    def test_propose_shu_split_below_10pct_still_blocked(self, db, maker):
+        from ledger.services import post_journal_entry
+
+        post_journal_entry(
+            description="Seed",
+            lines=[
+                ("1001", "DEBIT", Decimal("1000.00")),
+                ("3101", "CREDIT", Decimal("1000.00")),
+            ],
+            created_by=maker,
+            auto_certify=True,
+            certified_by=maker,
+        )
+
+        with pytest.raises(ValidationError):
             propose_change(
                 parameter_key="shu_split",
                 proposed_value={
-                    "reserva_legal_pct": 10,
+                    "reserva_legal_pct": 5,
                     "admin_fund_pct": 30,
-                    "jasa_simpanan_pct": 25,
+                    "jasa_simpanan_pct": 30,
                     "jasa_bunga_pct": 35,
                 },
                 effective_from="2026-07-01",

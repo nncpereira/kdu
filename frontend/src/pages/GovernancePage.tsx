@@ -83,6 +83,7 @@ export function GovernancePage() {
               "Proposed",
               "Effective",
               "Status",
+              "",
               "Created",
             ]}
             empty={changesQuery.data.length === 0}
@@ -103,6 +104,16 @@ export function GovernancePage() {
                 </td>
                 <td className="py-2 px-2">
                   <Badge value={c.status} />
+                </td>
+                <td className="py-2 px-2">
+                  {c.warnings.length > 0 && (
+                    <span
+                      title={c.warnings.join("\n")}
+                      className="inline-block px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800 cursor-help"
+                    >
+                      ⚠ {c.warnings.length}
+                    </span>
+                  )}
                 </td>
                 <td className="py-2 px-2 text-xs text-gray-500">
                   {formatDate(c.created_at)}

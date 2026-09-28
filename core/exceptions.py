@@ -16,10 +16,6 @@ class PipelineStateError(DomainError):
     pass
 
 
-class LegalReserveViolationError(DomainError):
-    pass
-
-
 def drf_exception_handler(exc, context):
     """
     Normalise Django ValidationError and our DomainError into DRF responses.

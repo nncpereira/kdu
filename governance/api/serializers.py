@@ -34,6 +34,7 @@ class GlobalConfigChangeSerializer(serializers.ModelSerializer):
             "proposed_value",
             "effective_from",
             "status",
+            "warnings",
             "created_at",
         ]
         read_only_fields = ["status", "created_at"]

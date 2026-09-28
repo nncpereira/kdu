@@ -14,6 +14,7 @@ export interface ConfigChange {
   proposed_value: Record<string, unknown>;
   effective_from: string;
   status: "PENDING_CHECK" | "PENDING_CERTIFY" | "CERTIFIED" | "REJECTED";
+  warnings: string[];
   created_at: string;
 }
 

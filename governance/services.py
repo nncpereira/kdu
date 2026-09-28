@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from audit.services import record_audit
-from core.exceptions import LegalReserveViolationError
 from governance.models import GlobalConfig, GlobalConfigChange
 from ledger.services import account_net_balance
 from pipeline.services import create_pipeline
@@ -69,12 +68,21 @@ def _require_number(mapping: dict, key: str) -> Decimal:
     return value
 
 
-def validate_shu_split(proposed: dict) -> None:
-    """
-    Validate the SHU split shape and the DL 76/2022 Art. 69 constraint.
+RESERVA_LEGAL_FLOOR_PCT = Decimal("25")
+RESERVA_LEGAL_MIN_PCT = Decimal("10")
 
-    Raises ValidationError (400-friendly) for any problem, never a
-    KeyError or a bare arithmetic error.
+
+def validate_shu_split(proposed: dict) -> list[str]:
+    """
+    Validate the SHU split shape and the DL 76/2022 Art. 69 guideline.
+
+    Raises ValidationError (400-friendly) for a malformed proposal, never
+    a KeyError or a bare arithmetic error. The Art. 69 reserve floor is
+    enforced as a hard minimum of RESERVA_LEGAL_MIN_PCT (10%) — below
+    that a proposal is rejected outright — and as a non-blocking warning
+    between that floor and the statutory guideline of 25%, since a
+    long-established cooperative may already hold enough accumulated
+    reserve to justify a lower ongoing allocation.
     """
     if not isinstance(proposed, dict):
         raise ValidationError({"proposed_value": "Must be a JSON object."})
@@ -101,14 +109,32 @@ def validate_shu_split(proposed: dict) -> None:
     # ---- Art. 69 (DL 76/2022) ------------------------------------
     kapital = account_net_balance("3101")  # Kapital Sosial
     reserva = account_net_balance("3501")  # Reserva Legal
+    reserve_not_yet_covered = reserva < kapital
 
-    if reserva < kapital and values["reserva_legal_pct"] < Decimal("25"):
-        raise LegalReserveViolationError(
-            "Reserva Legal must be >= 25% until it reaches 100% "
-            "of Social Capital (DL 76/2022 Art.69)."
+    if reserve_not_yet_covered and values["reserva_legal_pct"] < RESERVA_LEGAL_MIN_PCT:
+        raise ValidationError(
+            {
+                "reserva_legal_pct": (
+                    f"Reserva Legal cannot go below {RESERVA_LEGAL_MIN_PCT}% "
+                    "while Reserva Legal is still under 100% of Social Capital "
+                    "(DL 76/2022 Art. 69)."
+                )
+            }
         )
 
-def validate_obligatory_savings_cap(proposed) -> None:
+    warnings = []
+    if reserve_not_yet_covered and values["reserva_legal_pct"] < RESERVA_LEGAL_FLOOR_PCT:
+        warnings.append(
+            f"Reserva Legal is set to {values['reserva_legal_pct']}%, below the "
+            f"{RESERVA_LEGAL_FLOOR_PCT}% guideline in DL 76/2022 Art. 69, while "
+            "Reserva Legal has not yet reached 100% of Social Capital. Allowed "
+            "on the basis of the cooperative's existing accumulated reserve — "
+            "confirm this is intentional before certifying."
+        )
+    return warnings
+
+
+def validate_obligatory_savings_cap(proposed) -> list[str]:
     """Validates the plain-number shape for obligatory_savings_monthly_cap."""
     try:
         value = Decimal(str(proposed))
@@ -118,9 +144,10 @@ def validate_obligatory_savings_cap(proposed) -> None:
         raise ValidationError({"proposed_value": "Must be a non-negative number."})
     if value > Decimal("10000"):
         raise ValidationError({"proposed_value": "Cap seems unreasonably high."})
+    return []
 
 
-def validate_loan_interest_range(proposed: dict) -> None:
+def validate_loan_interest_range(proposed: dict) -> list[str]:
     """Validates the {min: X, max: Y} shape for loan_interest_rate_range."""
     if not isinstance(proposed, dict):
         raise ValidationError({"proposed_value": "Must be a JSON object."})
@@ -134,6 +161,7 @@ def validate_loan_interest_range(proposed: dict) -> None:
         )
     if hi > Decimal("1"):
         raise ValidationError({"max": "Monthly rate above 100% is not permitted."})
+    return []
 
 
 # Keep this registry after every validator definition so module import
@@ -156,9 +184,10 @@ def propose_change(
     if parameter_key not in REQUIRED_KEYS:
         raise ValidationError(f"Unknown parameter: {parameter_key}")
 
+    warnings = []
     validator = _VALIDATORS.get(parameter_key)
     if validator:
-        validator(proposed_value)
+        warnings = validator(proposed_value) or []
 
     # proposed_value = _json_safe(proposed_value)
     change = GlobalConfigChange.objects.create(
@@ -167,6 +196,7 @@ def propose_change(
         effective_from=effective_from,
         status=GlobalConfigChange.Status.PENDING_CHECK,
         created_by=maker_user,
+        warnings=warnings,
     )
     actor = create_pipeline(
         transaction_type="CONFIG_CHANGE",
@@ -187,6 +217,7 @@ def propose_change(
             metadata={
                 "proposed_value": proposed_value,
                 "effective_from": str(effective_from),
+                "warnings": warnings,
             },
             request=request,
         )

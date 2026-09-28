@@ -49,6 +49,11 @@ class GlobalConfigChange(UUIDTimeStampedModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT
     )
+    warnings = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Non-blocking validation warnings surfaced at propose time.",
+    )
     pipeline_actor = models.ForeignKey(
         "pipeline.TransactionPipelineActor",
         null=True,

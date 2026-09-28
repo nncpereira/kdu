@@ -28,7 +28,8 @@ export function ProposeSplitModal({ open, onClose }: Props) {
   const s = parseFloat(simpanan) || 0;
   const b = parseFloat(bunga) || 0;
   const total = r + a + s + b;
-  const reservaTooLow = r < 25; // Must be >= 25% until reserve = 100% capital
+  const reservaBelowGuideline = r < 25; // DL 76/2022 Art. 69 guideline
+  const reservaBelowFloor = r < 10; // hard minimum — the proposal will be rejected
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -42,8 +43,12 @@ export function ProposeSplitModal({ open, onClose }: Props) {
         },
         effective_from: effectiveFrom,
       }),
-    onSuccess: () => {
-      toast.success("SHU split proposed. Awaiting approval.");
+    onSuccess: (change) => {
+      if (change.warnings.length > 0) {
+        toast.warning(change.warnings[0]);
+      } else {
+        toast.success("SHU split proposed. Awaiting approval.");
+      }
       qc.invalidateQueries({ queryKey: ["governance"] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       onClose();
@@ -129,11 +134,19 @@ export function ProposeSplitModal({ open, onClose }: Props) {
           onChange={(e) => setEffectiveFrom(e.target.value)}
         />
 
-        {reservaTooLow && (
+        {reservaBelowFloor && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-3">
+            Reserva Legal is below the 10% floor. This will be rejected unless
+            the cooperative's accumulated reserve already exceeds 100% of
+            social capital.
+          </div>
+        )}
+        {!reservaBelowFloor && reservaBelowGuideline && (
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded p-3">
-            Reserva Legal is below 25%. This will be rejected unless the
-            cooperative's accumulated reserve already exceeds 100% of social
-            capital.
+            Reserva Legal is below the 25% guideline. This will still be
+            accepted, but flagged with a warning for the checker/certifier to
+            review, unless the cooperative's accumulated reserve already
+            exceeds 100% of social capital.
           </div>
         )}
 
