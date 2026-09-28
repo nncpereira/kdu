@@ -1722,13 +1722,16 @@ class TestGovernanceValidationHTTP:
         )
         assert resp.status_code == 400
 
-    def test_art69_blocks_low_reserva_when_below_capital(
+    def test_art69_warns_but_allows_reserva_at_10pct_when_below_capital(
         self, db, api_for, maker, certifier
     ):
         """
-        A valid-shaped split with reserva_legal_pct < 25% must be rejected
-        by Art. 69 once there is capital on the books and no reserve.
-        Should be a clean 400, never a 500.
+        A valid-shaped split with reserva_legal_pct at 10% (below the 25%
+        guideline but at the hard floor) is allowed once there is capital
+        on the books and no reserve, but comes back with a warning rather
+        than being silently accepted — a long-established cooperative may
+        already hold enough accumulated reserve to justify going below
+        the 25% guideline.
         """
         from decimal import Decimal
 
@@ -1752,7 +1755,7 @@ class TestGovernanceValidationHTTP:
             {
                 "parameter_key": "shu_split",
                 "proposed_value": {
-                    "reserva_legal_pct": 10,  # < 25 → Art. 69 should fire
+                    "reserva_legal_pct": 10,  # < 25 → warning, not a block
                     "admin_fund_pct": 40,
                     "jasa_simpanan_pct": 25,
                     "jasa_bunga_pct": 25,  # sum = 100 → shape is valid
@@ -1760,9 +1763,44 @@ class TestGovernanceValidationHTTP:
                 "effective_from": "2027-01-01",
             },
         )
+        assert resp.status_code == 201, resp.content
+        assert len(resp.data["warnings"]) == 1
+        assert "25%" in resp.data["warnings"][0]
+
+    def test_art69_still_blocks_reserva_below_10pct_when_below_capital(
+        self, db, api_for, maker, certifier
+    ):
+        from decimal import Decimal
+
+        from ledger.services import post_journal_entry
+
+        post_journal_entry(
+            description="Seed capital for Art.69 test",
+            lines=[
+                ("1001", "DEBIT", Decimal("1000.00")),
+                ("3101", "CREDIT", Decimal("1000.00")),
+            ],
+            created_by=maker,
+            auto_certify=True,
+            certified_by=certifier,
+        )
+
+        client = api_for(maker)
+        resp = self._post(
+            client,
+            {
+                "parameter_key": "shu_split",
+                "proposed_value": {
+                    "reserva_legal_pct": 5,  # below the hard 10% floor
+                    "admin_fund_pct": 40,
+                    "jasa_simpanan_pct": 30,
+                    "jasa_bunga_pct": 25,
+                },
+                "effective_from": "2027-01-01",
+            },
+        )
         assert resp.status_code == 400, resp.content
-        # The error should reference the legal reserve rule.
-        assert "reserva" in str(resp.data).lower() or "art" in str(resp.data).lower()
+        assert "reserva" in str(resp.data).lower()
 
     def test_sum_not_100_rejected(self, db, api_for, maker):
         client = api_for(maker)
@@ -2358,6 +2396,53 @@ class TestNotificationsHTTP:
         assert resp.status_code == 200
         queues = {i["queue"] for i in resp.data["items"]}
         assert "REJECTED" in queues
+
+    def test_maker_can_dismiss_a_rejected_notification(
+        self, db, api_for, maker, checker, maria
+    ):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+
+        checker_c = api_for(checker)
+        checker_c.post(
+            f"/api/v1/pipeline/{actor_id}/reject/",
+            {"reason": "test rejection"},
+            format="json",
+        )
+
+        dismiss = maker_c.post(f"/api/v1/audit/notifications/{actor_id}/dismiss/")
+        assert dismiss.status_code == 200, dismiss.content
+
+        resp = maker_c.get("/api/v1/audit/notifications/")
+        ids = {i["id"] for i in resp.data["items"]}
+        assert actor_id not in ids
+
+    def test_only_the_maker_can_dismiss_their_rejected_notification(
+        self, db, api_for, maker, checker, certifier, maria
+    ):
+        maker_c = api_for(maker)
+        r = maker_c.post(
+            "/api/v1/savings/deposit/",
+            {"member": str(maria.id), "amount": "100.00"},
+            format="json",
+        )
+        actor_id = r.data["pipeline_actor"]
+
+        checker_c = api_for(checker)
+        checker_c.post(
+            f"/api/v1/pipeline/{actor_id}/reject/",
+            {"reason": "test rejection"},
+            format="json",
+        )
+
+        certifier_c = api_for(certifier)
+        resp = certifier_c.post(f"/api/v1/audit/notifications/{actor_id}/dismiss/")
+        assert resp.status_code == 400
 
     def test_board_sees_empty_notifications(self, db, api_for, board):
         client = api_for(board)
