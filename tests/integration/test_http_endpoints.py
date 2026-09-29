@@ -1048,6 +1048,30 @@ class TestLoansHTTP:
         assert resp.status_code == 200
         assert resp.data["count"] >= 1
 
+    def test_search_loans_by_member_name_and_number(
+        self, db, api_for, board, maker, checker, certifier, maria, ana
+    ):
+        maker_c = api_for(maker)
+        checker_c = api_for(checker)
+        certifier_c = api_for(certifier)
+        self._disburse(maker_c, checker_c, certifier_c, maria)
+
+        board_c = api_for(board)
+
+        by_name = board_c.get("/api/v1/loans/", {"search": maria.first_name})
+        assert by_name.status_code == 200
+        assert by_name.data["count"] == 1
+        assert by_name.data["results"][0]["member_number"] == maria.membership_number
+        assert by_name.data["results"][0]["full_name"] == maria.full_name
+
+        by_number = board_c.get(
+            "/api/v1/loans/", {"search": maria.membership_number}
+        )
+        assert by_number.data["count"] == 1
+
+        no_match = board_c.get("/api/v1/loans/", {"search": ana.first_name})
+        assert no_match.data["count"] == 0
+
     def test_manual_repayment_full_flow(
         self, db, api_for, maker, checker, certifier, maria
     ):
@@ -1444,6 +1468,11 @@ class TestShuHTTP:
 
         fy.refresh_from_db()
         assert fy.status == "CLOSED"
+        # Regression: accumulated_reserva_legal is a stored snapshot that
+        # must be refreshed at close time, or it stays at whatever it was
+        # when the FY was created -- stale relative to the reserve
+        # allocation post_reserve_allocation() just posted.
+        assert fy.accumulated_reserva_legal == calc.reserva_legal_amt
 
     def test_maker_cancels_own_calculation(self, db, api_for, maker, maria):
         """
@@ -1501,6 +1530,37 @@ class TestShuHTTP:
         assert resp.status_code == 200
         assert len(resp.data) >= 1
         assert "net_payout" in resp.data[0]
+
+    def test_shu_payouts_list_includes_ineligible_members(
+        self, db, api_for, maker, board, maria, member_factory
+    ):
+        """
+        An Active member with no weighting row (e.g. joined too late for
+        any eligible month) must still show up, as $0.00/NOT_ELIGIBLE --
+        not silently disappear from the list.
+        """
+        too_late = member_factory(
+            first_name="Too", last_name="Late", date_joined="2026-06-22",
+        )
+        fy = self._seed_fy(maria)
+
+        from shu.services.calculation import compute_member_payouts
+
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc = ShuCalculation.objects.get(id=r.data["id"])
+        compute_member_payouts(calc)
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/shu/{calc.id}/payouts/")
+        assert resp.status_code == 200
+
+        by_member = {row["member_number"]: row for row in resp.data}
+        assert by_member[maria.membership_number]["status"] != "NOT_ELIGIBLE"
+        ineligible_row = by_member[too_late.membership_number]
+        assert ineligible_row["status"] == "NOT_ELIGIBLE"
+        assert ineligible_row["net_payout"] == "0.00"
+        assert ineligible_row["id"] is None
 
     def test_payout_detail_breakdown(self, db, api_for, maker, board, maria):
         from shu.models import ShuMemberMonthlyBalance
