@@ -1445,6 +1445,45 @@ class TestShuHTTP:
         fy.refresh_from_db()
         assert fy.status == "CLOSED"
 
+    def test_maker_cancels_own_calculation(self, db, api_for, maker, maria):
+        """
+        Regression: ShuCalculationCancelView existed but was never wired
+        into urls.py, so the "Cancel Stale Calculation" button 404'd.
+        """
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        resp = maker_c.post(f"/api/v1/shu/{calc_id}/cancel/")
+        assert resp.status_code == 200, resp.content
+        assert resp.data["status"] == "REJECTED"
+
+    def test_other_maker_cannot_cancel_calculation(
+        self, db, api_for, maker, board, maria
+    ):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        other_c = api_for(board)
+        resp = other_c.post(f"/api/v1/shu/{calc_id}/cancel/")
+        assert resp.status_code == 403
+
+    def test_superadmin_cancels_any_calculation(
+        self, db, api_for, maker, superadmin, maria
+    ):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        admin_c = api_for(superadmin)
+        resp = admin_c.post(f"/api/v1/shu/{calc_id}/cancel/")
+        assert resp.status_code == 200, resp.content
+        assert resp.data["status"] == "REJECTED"
+
     def test_shu_payouts_list(self, db, api_for, maker, board, maria):
         fy = self._seed_fy(maria)
         maker_c = api_for(maker)
@@ -1463,6 +1502,70 @@ class TestShuHTTP:
         assert len(resp.data) >= 1
         assert "net_payout" in resp.data[0]
 
+    def test_payout_detail_breakdown(self, db, api_for, maker, board, maria):
+        from shu.models import ShuMemberMonthlyBalance
+
+        fy = self._seed_fy(maria)
+        ShuMemberMonthlyBalance.objects.create(
+            fy=fy, member=maria, month_date="2025-07-31",
+            total_balance=Decimal("1000.00"),
+        )
+        ShuMemberMonthlyBalance.objects.create(
+            fy=fy, member=maria, month_date="2025-08-31",
+            total_balance=Decimal("1200.00"),
+        )
+
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        board_c = api_for(board)
+        resp = board_c.get(f"/api/v1/shu/{calc_id}/payouts/{maria.id}/detail/")
+        assert resp.status_code == 200, resp.content
+        assert resp.data["member_number"] == maria.membership_number
+        assert resp.data["months_active"] == 12
+        assert len(resp.data["monthly_balances"]) == 2
+        july = resp.data["monthly_balances"][0]
+        assert july["month_date"] == "2025-07-31"
+        assert july["weight"] == 12
+        assert july["weighted_balance"] == "12000.00"
+        assert july["eligible"] is True
+
+    def test_payout_detail_marks_ineligible_month(
+        self, db, api_for, maker, board, member_factory
+    ):
+        from shu.models import ShuMemberMonthlyBalance
+
+        # Joined after the 15th of March -> March must not count.
+        late_joiner = member_factory(
+            first_name="Late", last_name="Joiner", date_joined="2026-03-26",
+        )
+        fy = self._seed_fy(late_joiner)
+        ShuMemberMonthlyBalance.objects.create(
+            fy=fy, member=late_joiner, month_date="2026-03-31",
+            total_balance=Decimal("124.00"),
+        )
+        ShuMemberMonthlyBalance.objects.create(
+            fy=fy, member=late_joiner, month_date="2026-04-30",
+            total_balance=Decimal("184.00"),
+        )
+
+        maker_c = api_for(maker)
+        r = maker_c.post("/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json")
+        calc_id = r.data["id"]
+
+        board_c = api_for(board)
+        resp = board_c.get(
+            f"/api/v1/shu/{calc_id}/payouts/{late_joiner.id}/detail/"
+        )
+        assert resp.status_code == 200, resp.content
+        march, april = resp.data["monthly_balances"]
+        assert march["eligible"] is False
+        assert march["weight"] == 0
+        assert march["weighted_balance"] == "0.00"
+        assert april["eligible"] is True
+        assert april["weight"] == 3
+
     def test_list_fiscal_years(self, db, api_for, checker):
         ShuFiscalYearFactory()
         client = api_for(checker)
@@ -1479,6 +1582,47 @@ class TestShuHTTP:
         )
         assert resp.status_code == 201, resp.content
         assert resp.data["status"] == "OPEN"
+
+    def test_superadmin_refreshes_fiscal_year_totals(self, db, api_for, superadmin, maker):
+        from ledger.services import post_journal_entry
+
+        fy = ShuFiscalYearFactory(net_surplus=Decimal("0.00"))
+        post_journal_entry(
+            description="Interest income posted after FY creation",
+            lines=[
+                ("1001", "DEBIT", Decimal("75.00")),
+                ("40100", "CREDIT", Decimal("75.00")),
+            ],
+            created_by=maker,
+            entry_date=fy.year_start,
+            auto_certify=True,
+            certified_by=maker,
+        )
+
+        client = api_for(superadmin)
+        resp = client.post(f"/api/v1/shu/fiscal-years/{fy.id}/refresh/")
+        assert resp.status_code == 200, resp.content
+        assert resp.data["net_surplus"] == "75.00"
+
+    def test_refresh_blocked_while_calculation_active(
+        self, db, api_for, superadmin, maker, maria
+    ):
+        fy = self._seed_fy(maria)
+        maker_c = api_for(maker)
+        maker_c.post(
+            "/api/v1/shu/calculate/", {"fy_id": str(fy.id)}, format="json"
+        )
+
+        client = api_for(superadmin)
+        resp = client.post(f"/api/v1/shu/fiscal-years/{fy.id}/refresh/")
+        assert resp.status_code == 400
+        assert "existing SHU calculation" in resp.data["detail"]
+
+    def test_non_superadmin_cannot_refresh_fiscal_year(self, db, api_for, maker):
+        fy = ShuFiscalYearFactory()
+        client = api_for(maker)
+        resp = client.post(f"/api/v1/shu/fiscal-years/{fy.id}/refresh/")
+        assert resp.status_code == 403
 
     def test_maker_cannot_create_fiscal_year(self, db, api_for, maker):
         client = api_for(maker)

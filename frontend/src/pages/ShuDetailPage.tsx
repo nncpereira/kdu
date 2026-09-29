@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import clsx from "clsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getFiscalYear, calculateShu, getCalculation, getCalculationForFiscalYear, listPayouts,
-  backfillSnapshots, runAggregation, cancelCalculation,
+  backfillSnapshots, runAggregation, cancelCalculation, getPayoutDetail, ShuPayout,
+  refreshFiscalYear,
 } from "@/api/shu";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/Button";
@@ -21,6 +23,7 @@ export function ShuDetailPage() {
   const [pendingCalcId, setPendingCalcId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [calcError, setCalcError] = useState<string | null>(null);
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     setCalcError(null);
@@ -85,6 +88,20 @@ export function ShuDetailPage() {
     onSuccess: (r) => {
       toast.success(`Aggregated ${r.rows_created} member weighting rows.`);
       setFeedback(`Aggregated ${r.rows_created} member weighting rows.`);
+    },
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: () => refreshFiscalYear(fyId!),
+    onSuccess: (updated) => {
+      toast.success("Fiscal year totals recalculated from the ledger.");
+      setFeedback("Fiscal year totals recalculated from the ledger.");
+      qc.setQueryData(["shu", "fy", fyId], updated);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.detail ?? "Could not recalculate totals."
+      );
     },
   });
 
@@ -202,6 +219,15 @@ export function ShuDetailPage() {
       {isSuperadmin && (
         <Card title="Data Preparation (Superadmin)">
           <div className="flex flex-wrap gap-2">
+            {fy.status === "OPEN" && !calcId && (
+              <Button
+                variant="secondary"
+                onClick={() => refreshMutation.mutate()}
+                loading={refreshMutation.isPending}
+              >
+                Recalculate Totals
+              </Button>
+            )}
             <Button
               variant="secondary"
               onClick={() => backfillMutation.mutate()}
@@ -218,9 +244,16 @@ export function ShuDetailPage() {
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-3">
-            Run these before calculating SHU. Backfill captures month-end
-            balances for every month in the FY; aggregation produces the
-            per-member weighting units and interest totals.
+            {fy.status === "OPEN" && !calcId && (
+              <>
+                Net Surplus/Social Capital/Legal Reserve above are captured
+                once and don't auto-update — Recalculate Totals re-reads them
+                from the ledger (e.g. after posting a late expense). {" "}
+              </>
+            )}
+            Run backfill/aggregate before calculating SHU. Backfill captures
+            month-end balances for every month in the FY; aggregation
+            produces the per-member weighting units and interest totals.
           </p>
         </Card>
       )}
@@ -340,28 +373,45 @@ export function ShuDetailPage() {
                 ]}
                 empty={payoutsQuery.data.length === 0}
               >
-                {payoutsQuery.data.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-gray-100 hover:bg-gray-50"
-                  >
-                    <td className="py-2 px-2">
-                      <span className="font-mono text-xs">
-                        {p.member_number}
-                      </span>{" "}
-                      {p.full_name}
-                    </td>
-                    <td className="py-2 px-2">
-                      ${formatMoney(p.jasa_simpanan_gross)}
-                    </td>
-                    <td className="py-2 px-2">
-                      ${formatMoney(p.jasa_bunga_gross)}
-                    </td>
-                    <td className="py-2 px-2 font-medium">
-                      ${formatMoney(p.net_payout)}
-                    </td>
-                  </tr>
-                ))}
+                {payoutsQuery.data.map((p) => {
+                  const isExpanded = expandedMemberId === p.member;
+                  return (
+                    <Fragment key={p.id}>
+                      <tr
+                        onClick={() =>
+                          setExpandedMemberId(isExpanded ? null : p.member)
+                        }
+                        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="py-2 px-2">
+                          <span className="text-gray-400 mr-1">
+                            {isExpanded ? "▾" : "▸"}
+                          </span>
+                          <span className="font-mono text-xs">
+                            {p.member_number}
+                          </span>{" "}
+                          {p.full_name}
+                        </td>
+                        <td className="py-2 px-2">
+                          ${formatMoney(p.jasa_simpanan_gross)}
+                        </td>
+                        <td className="py-2 px-2">
+                          ${formatMoney(p.jasa_bunga_gross)}
+                        </td>
+                        <td className="py-2 px-2 font-medium">
+                          ${formatMoney(p.net_payout)}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={4} className="bg-gray-50 p-0">
+                            <PayoutDetailPanel calcId={calcId!} payout={p} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </Table>
             )}
           </Card>
@@ -377,6 +427,128 @@ function calcErrorTitle(error: string): string {
   if (error.includes("No active SHU split")) return "SHU split not configured";
   if (error.includes("not OPEN")) return "Fiscal year is closed";
   return "SHU calculation failed";
+}
+
+function PayoutDetailPanel({
+  calcId,
+  payout,
+}: {
+  calcId: string;
+  payout: ShuPayout;
+}) {
+  const detailQuery = useQuery({
+    queryKey: ["shu", "payout-detail", calcId, payout.member],
+    queryFn: () => getPayoutDetail(calcId, payout.member),
+  });
+
+  if (detailQuery.isLoading) {
+    return <p className="text-sm text-gray-500 px-4 py-3">Loading breakdown…</p>;
+  }
+  if (detailQuery.isError || !detailQuery.data) {
+    return (
+      <p className="text-sm text-red-600 px-4 py-3">
+        Failed to load breakdown.
+      </p>
+    );
+  }
+  const d = detailQuery.data;
+
+  return (
+    <div className="px-4 py-4 space-y-4 text-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MiniStat label="Months Active" value={String(d.months_active)} />
+        <MiniStat
+          label="Weighted Savings Units"
+          value={formatMoney(d.weighted_savings_units)}
+        />
+        <MiniStat
+          label="Loan Interest Paid"
+          value={`$${formatMoney(d.loan_interest_paid)}`}
+        />
+        <MiniStat
+          label="Sum Weighted Balance"
+          value={formatMoney(d.sum_weighted_balance)}
+        />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded p-3 space-y-1 text-xs text-gray-600">
+        <p>
+          <span className="font-medium text-gray-800">Jasa Simpanan:</span>{" "}
+          {formatMoney(d.weighted_savings_units)} / {formatMoney(d.total_weighted_savings_units)}{" "}
+          units × ${formatMoney(d.jasa_simpanan_pool)} pool ={" "}
+          <span className="font-medium text-gray-800">
+            ${formatMoney(d.jasa_simpanan_gross)}
+          </span>
+        </p>
+        <p>
+          <span className="font-medium text-gray-800">Jasa Bunga:</span>{" "}
+          ${formatMoney(d.loan_interest_paid)} / ${formatMoney(d.total_loan_interest_paid)}{" "}
+          interest × ${formatMoney(d.jasa_bunga_pool)} pool ={" "}
+          <span className="font-medium text-gray-800">
+            ${formatMoney(d.jasa_bunga_gross)}
+          </span>
+        </p>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">
+          Monthly savings balances (weight runs 12 → 1, July → June). A
+          balance can exist for a month marked "not eligible" below — it's
+          just historical record, and doesn't count toward the sum.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200">
+                <th className="py-1 pr-3">Month</th>
+                <th className="py-1 pr-3">Balance</th>
+                <th className="py-1 pr-3">Weight</th>
+                <th className="py-1 pr-3">Weighted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.monthly_balances.map((mb) => (
+                <tr
+                  key={mb.month_date}
+                  className={clsx(
+                    "border-b border-gray-100",
+                    !mb.eligible && "text-gray-400"
+                  )}
+                >
+                  <td className="py-1 pr-3">{formatDate(mb.month_date)}</td>
+                  <td className="py-1 pr-3">${formatMoney(mb.total_balance)}</td>
+                  <td className="py-1 pr-3">
+                    {mb.eligible ? `×${mb.weight}` : "—"}
+                  </td>
+                  <td className="py-1 pr-3">
+                    {mb.eligible ? (
+                      formatMoney(mb.weighted_balance)
+                    ) : (
+                      <span
+                        className="italic"
+                        title="Member joined after the 15th of this month, so it doesn't count toward the weighting (DL 76/2022 eligibility rule)."
+                      >
+                        not eligible
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded p-2">
+      <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-sm font-semibold text-gray-800">{value}</p>
+    </div>
+  );
 }
 
 function Alloc({

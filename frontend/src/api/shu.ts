@@ -66,6 +66,11 @@ export async function createFiscalYear(payload: {
   return data;
 }
 
+export async function refreshFiscalYear(id: string): Promise<FiscalYear> {
+  const { data } = await api.post<FiscalYear>(`/shu/fiscal-years/${id}/refresh/`);
+  return data;
+}
+
 export async function calculateShu(fyId: string): Promise<ShuCalculation> {
   const { data } = await api.post<ShuCalculation>("/shu/calculate/", {
     fy_id: fyId,
@@ -99,6 +104,41 @@ export async function cancelCalculation(id: string): Promise<ShuCalculation> {
 
 export async function listPayouts(calcId: string): Promise<ShuPayout[]> {
   const { data } = await api.get<ShuPayout[]>(`/shu/${calcId}/payouts/`);
+  return data;
+}
+
+export interface ShuMonthlyBalance {
+  month_date: string;
+  total_balance: string;
+  weight: number;
+  weighted_balance: string;
+  eligible: boolean;
+}
+
+export interface ShuPayoutDetail {
+  member_number: string;
+  full_name: string;
+  months_active: number;
+  sum_weighted_balance: string;
+  weighted_savings_units: string;
+  loan_interest_paid: string;
+  monthly_balances: ShuMonthlyBalance[];
+  total_weighted_savings_units: string;
+  total_loan_interest_paid: string;
+  jasa_simpanan_pool: string;
+  jasa_bunga_pool: string;
+  jasa_simpanan_gross: string;
+  jasa_bunga_gross: string;
+  net_payout: string;
+}
+
+export async function getPayoutDetail(
+  calcId: string,
+  memberId: string
+): Promise<ShuPayoutDetail> {
+  const { data } = await api.get<ShuPayoutDetail>(
+    `/shu/${calcId}/payouts/${memberId}/detail/`
+  );
   return data;
 }
 

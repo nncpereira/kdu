@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.db import models
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, status
@@ -15,10 +16,22 @@ from shu.api.serializers import (
     CreateFiscalYearSerializer,
     ShuCalculationSerializer,
     ShuFiscalYearSerializer,
+    ShuMemberPayoutDetailSerializer,
     ShuMemberPayoutSerializer,
 )
-from shu.models import ShuCalculation, ShuFiscalYear
-from shu.services.calculation import create_fiscal_year, run_shu_calculation
+from shu.models import (
+    ShuCalculation,
+    ShuFiscalYear,
+    ShuMemberMonthlyBalance,
+    ShuMemberPayout,
+    ShuWeightingBase,
+)
+from shu.services.calculation import (
+    create_fiscal_year,
+    refresh_fiscal_year_totals,
+    run_shu_calculation,
+)
+from shu.services.eligibility import eligible_months, month_weight
 from shu.services.snapshot import (
     aggregate_annual_weighting,
     backfill_snapshots,
@@ -77,6 +90,26 @@ class ShuFiscalYearDetailView(APIView):
     )
     def get(self, request, pk):
         fy = get_object_or_404(ShuFiscalYear, pk=pk)
+        return Response(ShuFiscalYearSerializer(fy).data)
+
+
+class ShuFiscalYearRefreshView(APIView):
+    """Re-read a fiscal year's totals from the ledger (see refresh_fiscal_year_totals)."""
+
+    permission_classes = [IsSuperadmin]
+
+    @extend_schema(
+        request=None,
+        responses={200: ShuFiscalYearSerializer},
+        tags=["shu"],
+        summary="Recalculate a fiscal year's totals from the current ledger",
+    )
+    def post(self, request, pk):
+        fy = get_object_or_404(ShuFiscalYear, pk=pk)
+        try:
+            fy = refresh_fiscal_year_totals(fy)
+        except ValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(ShuFiscalYearSerializer(fy).data)
 
 
@@ -205,6 +238,76 @@ class ShuPayoutListView(APIView):
         calc = get_object_or_404(ShuCalculation, pk=calc_id)
         payouts = calc.payouts.select_related("member")
         return Response(ShuMemberPayoutSerializer(payouts, many=True).data)
+
+
+class ShuPayoutDetailView(APIView):
+    """
+    Everything behind one member's payout, for manual verification: their
+    monthly balances (with the weight applied to each), weighted savings
+    units, loan interest paid, and the pool totals used in the
+    proportional split.
+    """
+
+    permission_classes = [IsStaffReadShu]
+
+    @extend_schema(
+        responses={200: ShuMemberPayoutDetailSerializer},
+        tags=["shu"],
+        summary="Get the weighting breakdown behind a member's SHU payout",
+    )
+    def get(self, request, calc_id, member_id):
+        calc = get_object_or_404(ShuCalculation, pk=calc_id)
+        payout = get_object_or_404(
+            ShuMemberPayout.objects.select_related("member"),
+            calc=calc,
+            member_id=member_id,
+        )
+        weighting = get_object_or_404(
+            ShuWeightingBase, fy=calc.fy, member_id=member_id
+        )
+
+        totals = ShuWeightingBase.objects.filter(fy=calc.fy).aggregate(
+            units=models.Sum("weighted_savings_units"),
+            interest=models.Sum("loan_interest_paid"),
+        )
+
+        eligible = eligible_months(
+            payout.member.date_joined, calc.fy.year_start, calc.fy.year_end
+        )
+
+        monthly = []
+        for snap in ShuMemberMonthlyBalance.objects.filter(
+            fy=calc.fy, member_id=member_id
+        ).order_by("month_date"):
+            is_eligible = snap.month_date in eligible
+            weight = month_weight(snap.month_date.month) if is_eligible else 0
+            monthly.append(
+                {
+                    "month_date": snap.month_date,
+                    "total_balance": snap.total_balance,
+                    "weight": weight,
+                    "weighted_balance": snap.total_balance * weight,
+                    "eligible": is_eligible,
+                }
+            )
+
+        data = {
+            "member_number": payout.member.membership_number,
+            "full_name": payout.member.full_name,
+            "months_active": weighting.months_active,
+            "sum_weighted_balance": weighting.sum_weighted_balance,
+            "weighted_savings_units": weighting.weighted_savings_units,
+            "loan_interest_paid": weighting.loan_interest_paid,
+            "monthly_balances": monthly,
+            "total_weighted_savings_units": totals["units"] or 0,
+            "total_loan_interest_paid": totals["interest"] or 0,
+            "jasa_simpanan_pool": calc.jasa_simpanan_amt,
+            "jasa_bunga_pool": calc.jasa_bunga_amt,
+            "jasa_simpanan_gross": payout.jasa_simpanan_gross,
+            "jasa_bunga_gross": payout.jasa_bunga_gross,
+            "net_payout": payout.net_payout,
+        }
+        return Response(ShuMemberPayoutDetailSerializer(data).data)
 
 
 # ====================================================================

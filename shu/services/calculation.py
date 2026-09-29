@@ -161,32 +161,66 @@ def compute_member_payouts(calc: ShuCalculation) -> int:
     return count
 
 
-@transaction.atomic
-def create_fiscal_year(year_start, year_end) -> ShuFiscalYear:
+def _compute_fy_totals(year_start, year_end) -> dict:
     """
-    Create a new fiscal year, computing totals from the immutable ledger:
+    Totals from the immutable ledger, as of `year_end`:
       - net_surplus              = revenue − expenses for the period
-      - kapital_sosial           = net balance of 3101 at FY end
-      - accumulated_reserva_legal = net balance of 3501 at FY end
+      - kapital_sosial           = net balance of 3101
+      - accumulated_reserva_legal = net balance of 3501
     """
     from ledger.services import account_net_balance
     from reports.services import income_statement
 
+    inc = income_statement(year_start, year_end)
+    return {
+        "net_surplus": inc["net_surplus"],
+        "kapital_sosial": account_net_balance("3101", as_of=year_end),
+        "accumulated_reserva_legal": account_net_balance("3501", as_of=year_end),
+    }
+
+
+@transaction.atomic
+def create_fiscal_year(year_start, year_end) -> ShuFiscalYear:
+    """Create a new OPEN fiscal year, computing its totals from the ledger."""
     if year_end <= year_start:
         raise ValidationError("year_end must be after year_start.")
 
     if ShuFiscalYear.objects.filter(year_start=year_start, year_end=year_end).exists():
         raise ValidationError("A fiscal year with the same dates already exists.")
 
-    inc = income_statement(year_start, year_end)
-    kapital = account_net_balance("3101", as_of=year_end)
-    reserva = account_net_balance("3501", as_of=year_end)
-
+    totals = _compute_fy_totals(year_start, year_end)
     return ShuFiscalYear.objects.create(
         year_start=year_start,
         year_end=year_end,
         status=ShuFiscalYear.Status.OPEN,
-        net_surplus=inc["net_surplus"],
-        kapital_sosial=kapital,
-        accumulated_reserva_legal=reserva,
+        **totals,
     )
+
+
+@transaction.atomic
+def refresh_fiscal_year_totals(fy: ShuFiscalYear) -> ShuFiscalYear:
+    """
+    Re-read net_surplus/kapital_sosial/accumulated_reserva_legal from the
+    ledger. These are captured once at create_fiscal_year() time and don't
+    auto-update as later revenue/expense/capital activity is posted, so
+    this is the only way to pick up e.g. an expense recorded after the FY
+    was created but before its SHU calculation is certified.
+
+    Blocked once a non-rejected calculation exists for this FY — that
+    calculation already has split amounts computed against the old
+    totals, and refreshing here would leave them silently inconsistent.
+    """
+    if fy.status != ShuFiscalYear.Status.OPEN:
+        raise ValidationError("Only an OPEN fiscal year's totals can be refreshed.")
+
+    if fy.calculations.exclude(status=ShuCalculation.Status.REJECTED).exists():
+        raise ValidationError(
+            "Cancel (reject) the existing SHU calculation for this fiscal "
+            "year before refreshing its totals."
+        )
+
+    totals = _compute_fy_totals(fy.year_start, fy.year_end)
+    for field, value in totals.items():
+        setattr(fy, field, value)
+    fy.save(update_fields=[*totals.keys(), "updated_at"])
+    return fy

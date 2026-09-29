@@ -3,6 +3,43 @@ from rest_framework import serializers
 from shu.models import ShuCalculation, ShuFiscalYear, ShuMemberPayout
 
 
+class ShuMonthlyBalanceSerializer(serializers.Serializer):
+    month_date = serializers.DateField()
+    total_balance = serializers.DecimalField(max_digits=18, decimal_places=2)
+    weight = serializers.IntegerField()
+    weighted_balance = serializers.DecimalField(max_digits=18, decimal_places=2)
+    eligible = serializers.BooleanField()
+
+
+class ShuMemberPayoutDetailSerializer(serializers.Serializer):
+    """
+    Everything behind one member's payout: their weighting inputs, the
+    monthly balances that produced them, and the pool totals needed to
+    reproduce the proportional-split math by hand.
+    """
+
+    member_number = serializers.CharField()
+    full_name = serializers.CharField()
+    months_active = serializers.IntegerField()
+    sum_weighted_balance = serializers.DecimalField(max_digits=18, decimal_places=2)
+    weighted_savings_units = serializers.DecimalField(max_digits=18, decimal_places=2)
+    loan_interest_paid = serializers.DecimalField(max_digits=18, decimal_places=2)
+    monthly_balances = ShuMonthlyBalanceSerializer(many=True)
+
+    total_weighted_savings_units = serializers.DecimalField(
+        max_digits=18, decimal_places=2
+    )
+    total_loan_interest_paid = serializers.DecimalField(
+        max_digits=18, decimal_places=2
+    )
+    jasa_simpanan_pool = serializers.DecimalField(max_digits=18, decimal_places=2)
+    jasa_bunga_pool = serializers.DecimalField(max_digits=18, decimal_places=2)
+
+    jasa_simpanan_gross = serializers.DecimalField(max_digits=18, decimal_places=2)
+    jasa_bunga_gross = serializers.DecimalField(max_digits=18, decimal_places=2)
+    net_payout = serializers.DecimalField(max_digits=18, decimal_places=2)
+
+
 class ShuCalculationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ShuCalculation
