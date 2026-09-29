@@ -38,7 +38,7 @@ export interface ShuCalculation {
 }
 
 export interface ShuPayout {
-  id: string;
+  id: string | null;
   member: string;
   member_number: string;
   full_name: string;

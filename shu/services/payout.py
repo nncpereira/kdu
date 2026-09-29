@@ -86,8 +86,15 @@ def finalise_payout(calc: ShuCalculation, certifier_user) -> ShuCalculation:
     calc.status = ShuCalculation.Status.PAYOUT_COMPLETE
     calc.save(update_fields=["status", "updated_at"])
 
-    # Close the fiscal year
+    # Close the fiscal year, re-reading its totals so the reserve
+    # allocation just posted above (and anything else recorded since
+    # creation) is reflected rather than left at a stale snapshot.
+    from shu.services.calculation import _compute_fy_totals
+
     fy = calc.fy
+    totals = _compute_fy_totals(fy.year_start, fy.year_end)
+    for field, value in totals.items():
+        setattr(fy, field, value)
     fy.status = fy.Status.CLOSED
-    fy.save(update_fields=["status", "updated_at"])
+    fy.save(update_fields=[*totals.keys(), "status", "updated_at"])
     return calc

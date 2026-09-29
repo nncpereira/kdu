@@ -235,9 +235,34 @@ class ShuPayoutListView(APIView):
         summary="List member payouts for a calculation",
     )
     def get(self, request, calc_id):
+        from members.models import Member
+
         calc = get_object_or_404(ShuCalculation, pk=calc_id)
         payouts = calc.payouts.select_related("member")
-        return Response(ShuMemberPayoutSerializer(payouts, many=True).data)
+        data = list(ShuMemberPayoutSerializer(payouts, many=True).data)
+
+        # Active/Dormant members without a payout row weren't eligible for
+        # this FY (e.g. joined after the 15th of its only remaining month)
+        # rather than forgotten — surface them explicitly instead of just
+        # omitting them from the list.
+        paid_member_ids = {p.member_id for p in payouts}
+        ineligible = Member.objects.filter(
+            status__in=["Active", "Dormant"]
+        ).exclude(id__in=paid_member_ids)
+        for m in ineligible:
+            data.append(
+                {
+                    "id": None,
+                    "member": str(m.id),
+                    "member_number": m.membership_number,
+                    "full_name": m.full_name,
+                    "jasa_simpanan_gross": "0.00",
+                    "jasa_bunga_gross": "0.00",
+                    "net_payout": "0.00",
+                    "status": "NOT_ELIGIBLE",
+                }
+            )
+        return Response(data)
 
 
 class ShuPayoutDetailView(APIView):

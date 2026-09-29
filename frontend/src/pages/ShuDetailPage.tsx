@@ -374,23 +374,42 @@ export function ShuDetailPage() {
                 empty={payoutsQuery.data.length === 0}
               >
                 {payoutsQuery.data.map((p) => {
-                  const isExpanded = expandedMemberId === p.member;
+                  const isIneligible = p.status === "NOT_ELIGIBLE";
+                  const isExpanded = !isIneligible && expandedMemberId === p.member;
                   return (
-                    <Fragment key={p.id}>
+                    <Fragment key={p.member}>
                       <tr
-                        onClick={() =>
-                          setExpandedMemberId(isExpanded ? null : p.member)
+                        onClick={
+                          isIneligible
+                            ? undefined
+                            : () =>
+                                setExpandedMemberId(isExpanded ? null : p.member)
                         }
-                        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        className={clsx(
+                          "border-b border-gray-100",
+                          isIneligible
+                            ? "text-gray-400"
+                            : "hover:bg-gray-50 cursor-pointer"
+                        )}
                       >
                         <td className="py-2 px-2">
-                          <span className="text-gray-400 mr-1">
-                            {isExpanded ? "▾" : "▸"}
-                          </span>
+                          {!isIneligible && (
+                            <span className="text-gray-400 mr-1">
+                              {isExpanded ? "▾" : "▸"}
+                            </span>
+                          )}
                           <span className="font-mono text-xs">
                             {p.member_number}
                           </span>{" "}
                           {p.full_name}
+                          {isIneligible && (
+                            <span
+                              className="ml-2 text-xs italic"
+                              title="No eligible months in this fiscal year (e.g. joined too late to qualify)."
+                            >
+                              — not eligible this FY
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-2">
                           ${formatMoney(p.jasa_simpanan_gross)}
