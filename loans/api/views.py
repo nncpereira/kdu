@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -37,6 +38,14 @@ class LoanListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(member__first_name__icontains=search)
+                | Q(member__middle_name__icontains=search)
+                | Q(member__last_name__icontains=search)
+                | Q(member__membership_number__icontains=search)
+            )
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response(LoanSerializer(page, many=True).data)

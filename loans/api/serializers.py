@@ -9,6 +9,7 @@ class LoanSerializer(serializers.ModelSerializer):
     member_number = serializers.CharField(
         source="member.membership_number", read_only=True
     )
+    full_name = serializers.CharField(source="member.full_name", read_only=True)
 
     class Meta:
         model = Loan
@@ -16,6 +17,7 @@ class LoanSerializer(serializers.ModelSerializer):
             "id",
             "member",
             "member_number",
+            "full_name",
             "principal_original",
             "principal_outstanding",
             "monthly_rate",

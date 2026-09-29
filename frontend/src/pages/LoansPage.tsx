@@ -23,16 +23,18 @@ const STATUSES: (LoanStatus | "")[] = [
 export function LoansPage() {
   const { profile } = useAuth();
   const [status, setStatus] = useState<LoanStatus | "">("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
   const pageSize = 20;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["loans", { status, page }],
+    queryKey: ["loans", { status, search, page }],
     queryFn: () =>
       listLoans({
         status: status || undefined,
+        search: search || undefined,
         page,
         page_size: pageSize,
       }),
@@ -57,6 +59,18 @@ export function LoansPage() {
 
       <Card>
         <div className="flex flex-wrap gap-3 mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Search by name or member number..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
           <select
             value={status}
             onChange={(e) => {
@@ -102,8 +116,11 @@ export function LoansPage() {
                   key={loan.id}
                   className="border-b border-gray-100 hover:bg-gray-50"
                 >
-                  <td className="py-2 px-2 font-mono text-xs">
-                    {loan.member_number}
+                  <td className="py-2 px-2">
+                    <span className="font-mono text-xs">
+                      {loan.member_number}
+                    </span>{" "}
+                    {loan.full_name}
                   </td>
                   <td className="py-2 px-2">
                     ${formatMoney(loan.principal_original)}

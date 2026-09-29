@@ -18,6 +18,7 @@ export interface Loan {
   id: string;
   member: string;
   member_number: string;
+  full_name: string;
   principal_original: string;
   principal_outstanding: string;
   monthly_rate: string;
@@ -58,6 +59,7 @@ export interface OriginateLoanPayload {
 export async function listLoans(params?: {
   member?: string;
   status?: LoanStatus;
+  search?: string;
   page?: number;
   page_size?: number;
 }): Promise<Paginated<Loan>> {
