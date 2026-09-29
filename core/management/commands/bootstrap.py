@@ -31,8 +31,9 @@ class Command(BaseCommand):
         # Loading the legacy fixture would bypass auto-managed timestamps.
         self.stdout.write("Chart of Accounts ready (seeded by migrations).")
 
-        self.stdout.write("Loading default governance config…")
-        # Ensure at least one superadmin exists before governance fixture
+        # Default governance config (obligatory_savings_monthly_cap,
+        # loan_interest_rate_range) is seeded by governance.0002_seed_default_config.
+        # shu_split is deliberately left unset until the cooperative proposes one.
         if not UserProfile.objects.filter(role=UserProfile.Role.SUPERADMIN).exists():
             self.stdout.write("Creating superadmin…")
             create_staff_user(
@@ -43,8 +44,6 @@ class Command(BaseCommand):
                 first_name="Super",
                 last_name="Admin",
             )
-
-        call_command("loaddata", "default_config")
 
         if (
             opts["fresh"]
