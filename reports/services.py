@@ -1,10 +1,19 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncMonth
+from django.utils import timezone
 
 from accounting.models import Account
 from ledger.models import JournalTransactionLine
+
+
+def _month_start(base, months_back: int):
+    month = base.month - months_back
+    year = base.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    return base.replace(year=year, month=month, day=1)
 
 
 def dashboard_summary():
@@ -45,6 +54,39 @@ def dashboard_summary():
         )[:10]
     )
 
+    today = timezone.now().date().replace(day=1)
+    month_starts = [_month_start(today, i) for i in range(5, -1, -1)]
+    by_month = {m: {"DEPOSIT": Decimal("0"), "WITHDRAWAL": Decimal("0")} for m in month_starts}
+    txn_rows = (
+        SavingsTxn.objects.filter(
+            status="COMPLETED", created_at__date__gte=month_starts[0]
+        )
+        .annotate(month=TruncMonth("created_at"))
+        .values("month", "transaction_type")
+        .annotate(total=Sum("requested_amount"))
+    )
+    for row in txn_rows:
+        key = row["month"].date().replace(day=1)
+        if key in by_month:
+            by_month[key][row["transaction_type"]] = row["total"] or Decimal("0")
+
+    cash_flow_trend = [
+        {
+            "month": m.strftime("%Y-%m"),
+            "deposits": str(by_month[m]["DEPOSIT"]),
+            "withdrawals": str(by_month[m]["WITHDRAWAL"]),
+        }
+        for m in month_starts
+    ]
+
+    loan_status_counts = dict(
+        Loan.objects.values_list("status").annotate(c=Count("id"))
+    )
+    loan_pipeline = [
+        {"status": s.value, "count": loan_status_counts.get(s.value, 0)}
+        for s in Loan.Status
+    ]
+
     return {
         "members": {
             "active": members_active,
@@ -69,6 +111,8 @@ def dashboard_summary():
             }
             for r in recent
         ],
+        "cash_flow_trend": cash_flow_trend,
+        "loan_pipeline": loan_pipeline,
     }
 
 

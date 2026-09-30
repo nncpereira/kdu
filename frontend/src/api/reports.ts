@@ -46,6 +46,15 @@ export interface DashboardSummary {
     member_number: string;
     created_at: string;
   }[];
+  cash_flow_trend: {
+    month: string;
+    deposits: string;
+    withdrawals: string;
+  }[];
+  loan_pipeline: {
+    status: "DRAFT" | "DISBURSED" | "FULLY_REPAID" | "WRITTEN_OFF";
+    count: number;
+  }[];
 }
 
 export async function getDashboard(): Promise<DashboardSummary> {
