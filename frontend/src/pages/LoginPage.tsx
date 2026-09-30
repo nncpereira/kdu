@@ -88,13 +88,14 @@ export function LoginPage() {
 
             <p className="text-xs text-center text-gray-500 pt-2">
               Access is monitored. Contact a Superadmin if you need an account.
-              Staff and members sign in with the same form.
+              {/* Staff and members sign in with the same form. */}
             </p>
           </form>
         </div>
 
-        <p className="text-center text-xs text-white/70 mt-6">
-          DL 16/2004 as amended by DL 76/2022
+        <p className="text-center text-xs text-gray-500 mt-6">
+          {/* DL 16/2004 as amended by DL 76/2022 */}
+          Developed & Maintained by Nicolino Nilton C. Pereira
         </p>
       </div>
     </div>

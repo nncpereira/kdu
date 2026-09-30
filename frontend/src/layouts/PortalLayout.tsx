@@ -86,7 +86,8 @@ export function PortalLayout() {
             Koperativa Dezenvolvimentu Umanu · KDU
           </p>
           <p className="text-[10px] text-gray-400 mt-1">
-            DL 16/2004 as amended by DL 76/2022
+            {/* DL 16/2004 as amended by DL 76/2022 */}
+            Developed & Maintained by Nicolino Nilton C. Pereira
           </p>
         </div>
       </footer>
