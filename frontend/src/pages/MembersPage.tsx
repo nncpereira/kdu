@@ -28,7 +28,7 @@ export function MembersPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const pageSize = 20;
+  const pageSize = 15;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["members", { status, search, page }],

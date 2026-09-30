@@ -26,7 +26,7 @@ export function SavingsPage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [reverseTarget, setReverseTarget] = useState<SavingsTransaction | null>(null);
 
-  const pageSize = 20;
+  const pageSize = 15;
 
   const canMake =
     profile?.role === "MAKER" || profile?.role === "SUPERADMIN";

@@ -27,7 +27,7 @@ export function LoansPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const pageSize = 20;
+  const pageSize = 15;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["loans", { status, search, page }],
