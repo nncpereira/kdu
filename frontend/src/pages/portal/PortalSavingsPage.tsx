@@ -92,32 +92,20 @@ export function PortalSavingsPage() {
           </p>
         ) : (
           <Table
-            headers={["Date", "Type", "Amount", "Obligatory", "Voluntary", "Status"]}
+            headers={["Date", "Event", "Amount", "Status"]}
             empty={!txnsQuery.isLoading && (txnsQuery.data?.length ?? 0) === 0}
           >
             {txnsQuery.isLoading ? (
-              <TableSkeleton rows={5} cols={6} />
+              <TableSkeleton rows={5} cols={4} />
             ) : (
               (txnsQuery.data ?? []).map((t) => (
                 <tr key={t.id} className="border-b border-gray-100">
                   <td className="py-2 px-2 text-xs text-gray-500">
-                    {new Date(t.created_at).toLocaleDateString()}
+                    {new Date(t.date).toLocaleDateString()}
                   </td>
-                  <td className="py-2 px-2">
-                    <Badge value={t.transaction_type} />
-                  </td>
+                  <td className="py-2 px-2">{t.event}</td>
                   <td className="py-2 px-2 font-medium">
-                    ${formatMoney(t.requested_amount)}
-                  </td>
-                  <td className="py-2 px-2 text-gray-600">
-                    {t.transaction_type === "DEPOSIT"
-                      ? `$${formatMoney(t.obligatory_portion)}`
-                      : "—"}
-                  </td>
-                  <td className="py-2 px-2 text-gray-600">
-                    {t.transaction_type === "DEPOSIT"
-                      ? `$${formatMoney(t.voluntary_portion)}`
-                      : "—"}
+                    ${formatMoney(t.amount)}
                   </td>
                   <td className="py-2 px-2">
                     <Badge value={t.status} />

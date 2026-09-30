@@ -2,6 +2,7 @@ from django.urls import path
 
 from members.api.me_views import (
     MyDashboardView,
+    MyLoanRepaymentsView,
     MyLoansView,
     MyProfileView,
     MySavingsView,
@@ -41,6 +42,11 @@ urlpatterns = [
     path("me/savings/", MySavingsView.as_view(), name="me-savings"),
     path("me/transactions/", MyTransactionsView.as_view(), name="me-transactions"),
     path("me/loans/", MyLoansView.as_view(), name="me-loans"),
+    path(
+        "me/loans/<uuid:loan_id>/repayments/",
+        MyLoanRepaymentsView.as_view(),
+        name="me-loan-repayments",
+    ),
     path("me/shu/", MyShuStatementView.as_view(), name="me-shu-all"),
     path("me/shu/<int:year>/", MyShuStatementView.as_view(), name="me-shu"),
     # Superadmin: member login management

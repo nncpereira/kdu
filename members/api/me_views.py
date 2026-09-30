@@ -1,19 +1,18 @@
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsMember
-from loans.models import Loan
+from loans.api.serializers import LoanRepaymentSerializer
+from loans.models import Loan, LoanRepayment
 from members.api.serializers import MemberSerializer, UpdateMyMemberSerializer
-from savings.api.serializers import (
-    TransactionSerializer,
-    VoluntaryDepositSerializer,
-)
+from savings.api.serializers import VoluntaryDepositSerializer
 from savings.models import MemberVoluntaryDeposit
 from savings.models import Transaction as SavingsTxn
 from shu.api.serializers import MyShuPayoutSerializer
@@ -171,6 +170,13 @@ class MySavingsView(APIView):
 
 
 class MyTransactionsView(APIView):
+    """
+    Unified history mirroring the admin member-detail "Transaction History"
+    table: savings deposits/withdrawals plus initial capital, exit refunds,
+    and loan-repayment cash swept into the member's own savings -- not just
+    the raw savings ledger, which was missing those event types.
+    """
+
     permission_classes = [IsMember]
 
     @extend_schema(
@@ -182,8 +188,53 @@ class MyTransactionsView(APIView):
         member = _get_member(request)
         if not member:
             return Response({"detail": "No member profile linked."}, status=404)
-        qs = SavingsTxn.objects.filter(member=member).order_by("-created_at")[:200]
-        return Response(TransactionSerializer(qs, many=True).data)
+
+        rows = [
+            {
+                "id": str(o.id),
+                "date": o.created_at,
+                "event": "Initial Capital",
+                "amount": str(o.initial_capital_amount),
+                "status": o.status,
+            }
+            for o in member.onboardings.all()
+        ]
+        rows += [
+            {
+                "id": str(e.id),
+                "date": e.created_at,
+                "event": "Capital Refund (Exit)",
+                "amount": str(e.refund_amount),
+                "status": e.status,
+            }
+            for e in member.exit_requests.all()
+        ]
+        rows += [
+            {
+                "id": str(t.id),
+                "date": t.created_at,
+                "event": "Deposit" if t.transaction_type == "DEPOSIT" else "Withdrawal",
+                "amount": str(t.requested_amount),
+                "status": t.status,
+            }
+            for t in SavingsTxn.objects.filter(member=member)
+        ]
+        sweeps = LoanRepayment.objects.filter(loan__member=member).filter(
+            Q(obligatory_portion__gt=0) | Q(voluntary_portion__gt=0)
+        )
+        rows += [
+            {
+                "id": str(s.id),
+                "date": s.created_at,
+                "event": "Loan Repayment → Savings",
+                "amount": str(s.obligatory_portion + s.voluntary_portion),
+                "status": s.status,
+            }
+            for s in sweeps
+        ]
+
+        rows.sort(key=lambda r: r["date"], reverse=True)
+        return Response(rows[:200])
 
 
 # ====================================================================
@@ -219,6 +270,26 @@ class MyLoansView(APIView):
                 for loan in loans
             ]
         )
+
+
+class MyLoanRepaymentsView(APIView):
+    permission_classes = [IsMember]
+
+    @extend_schema(
+        responses={200: LoanRepaymentSerializer(many=True)},
+        tags=["member-portal"],
+        summary="Repayment history for one of the member's own loans",
+    )
+    def get(self, request, loan_id):
+        member = _get_member(request)
+        if not member:
+            return Response({"detail": "No member profile linked."}, status=404)
+
+        loan = get_object_or_404(Loan, pk=loan_id, member=member)
+        qs = LoanRepayment.objects.filter(
+            loan=loan, status=LoanRepayment.Status.COMPLETED
+        ).order_by("-payment_date")
+        return Response(LoanRepaymentSerializer(qs, many=True).data)
 
 
 # ====================================================================

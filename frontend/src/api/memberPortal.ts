@@ -65,12 +65,10 @@ export interface PortalSavings {
 
 export interface PortalTransaction {
   id: string;
-  transaction_type: "DEPOSIT" | "WITHDRAWAL";
-  requested_amount: string;
-  obligatory_portion: string;
-  voluntary_portion: string;
+  date: string;
+  event: string;
+  amount: string;
   status: string;
-  created_at: string;
 }
 
 export interface PortalLoan {
@@ -82,6 +80,19 @@ export interface PortalLoan {
   purpose: string;
   status: string;
   disbursed_date: string | null;
+  created_at: string;
+}
+
+export interface PortalLoanRepayment {
+  id: string;
+  loan: string;
+  principal_paid: string;
+  interest_paid: string;
+  obligatory_portion: string;
+  voluntary_portion: string;
+  payment_date: string;
+  mode: "MANUAL" | "SCHEDULED";
+  status: string;
   created_at: string;
 }
 
@@ -135,6 +146,15 @@ export async function getMyTransactions(): Promise<PortalTransaction[]> {
 
 export async function getMyLoans(): Promise<PortalLoan[]> {
   const { data } = await api.get<PortalLoan[]>("/members/me/loans/");
+  return data;
+}
+
+export async function getMyLoanRepayments(
+  loanId: string
+): Promise<PortalLoanRepayment[]> {
+  const { data } = await api.get<PortalLoanRepayment[]>(
+    `/members/me/loans/${loanId}/repayments/`
+  );
   return data;
 }
 

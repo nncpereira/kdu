@@ -630,10 +630,121 @@ class TestMemberPortalHTTP:
         assert resp.status_code == 200
         assert isinstance(resp.data, list)
 
+    def test_member_transactions_include_initial_capital_and_loan_sweeps(
+        self, db, member_client, maria, maker
+    ):
+        """
+        Regression: the member portal's transaction history only queried
+        the savings ledger (deposits/withdrawals), so members never saw
+        their initial capital payment or loan-repayment cash swept into
+        their own savings -- both of which the admin member-detail view
+        already showed.
+        """
+        from datetime import date
+
+        from ledger.services import post_journal_entry
+        from loans.models import Loan, LoanRepayment
+        from members.models import MemberOnboarding
+
+        je = post_journal_entry(
+            description=f"Initial capital for {maria.membership_number}",
+            lines=[
+                ("1001", "DEBIT", Decimal("150.00")),
+                ("3101", "CREDIT", Decimal("150.00"), maria),
+            ],
+            created_by=maker,
+            auto_certify=True,
+            certified_by=maker,
+        )
+        MemberOnboarding.objects.create(
+            member=maria,
+            initial_capital_amount=Decimal("150.00"),
+            journal_entry=je,
+            status=MemberOnboarding.Status.COMPLETED,
+        )
+        loan = Loan.objects.create(
+            member=maria,
+            principal_original=Decimal("500.00"),
+            principal_outstanding=Decimal("400.00"),
+            monthly_rate=Decimal("0.0150"),
+            term_months=12,
+            status=Loan.Status.DISBURSED,
+        )
+        LoanRepayment.objects.create(
+            loan=loan,
+            principal_paid=Decimal("100.00"),
+            interest_paid=Decimal("7.50"),
+            obligatory_portion=Decimal("10.00"),
+            voluntary_portion=Decimal("5.67"),
+            payment_date=date(2026, 2, 5),
+            mode="SCHEDULED",
+            status=LoanRepayment.Status.COMPLETED,
+        )
+
+        resp = member_client.get("/api/v1/members/me/transactions/")
+        assert resp.status_code == 200
+        events = {row["event"] for row in resp.data}
+        assert "Initial Capital" in events
+        assert "Loan Repayment → Savings" in events
+        sweep_row = next(
+            r for r in resp.data if r["event"] == "Loan Repayment → Savings"
+        )
+        assert sweep_row["amount"] == "15.67"
+
     def test_member_can_fetch_loans(self, db, member_client):
         resp = member_client.get("/api/v1/members/me/loans/")
         assert resp.status_code == 200
         assert isinstance(resp.data, list)
+
+    def test_member_can_fetch_own_loan_repayment_history(
+        self, db, member_client, maria
+    ):
+        from datetime import date
+
+        from loans.models import Loan, LoanRepayment
+
+        loan = Loan.objects.create(
+            member=maria,
+            principal_original=Decimal("500.00"),
+            principal_outstanding=Decimal("400.00"),
+            monthly_rate=Decimal("0.0150"),
+            term_months=12,
+            status=Loan.Status.DISBURSED,
+            disbursed_date=date(2026, 1, 5),
+        )
+        LoanRepayment.objects.create(
+            loan=loan,
+            principal_paid=Decimal("100.00"),
+            interest_paid=Decimal("7.50"),
+            payment_date=date(2026, 2, 5),
+            mode="MANUAL",
+            status=LoanRepayment.Status.COMPLETED,
+        )
+
+        resp = member_client.get(
+            f"/api/v1/members/me/loans/{loan.id}/repayments/"
+        )
+        assert resp.status_code == 200
+        assert len(resp.data) == 1
+        assert resp.data[0]["principal_paid"] == "100.00"
+
+    def test_member_cannot_fetch_another_members_loan_repayments(
+        self, db, member_client, maria, ana
+    ):
+        from loans.models import Loan
+
+        other_loan = Loan.objects.create(
+            member=ana,
+            principal_original=Decimal("300.00"),
+            principal_outstanding=Decimal("300.00"),
+            monthly_rate=Decimal("0.0150"),
+            term_months=6,
+            status=Loan.Status.DISBURSED,
+        )
+        resp = member_client.get(
+            f"/api/v1/members/me/loans/{other_loan.id}/repayments/"
+        )
+        assert resp.status_code == 404
 
     def test_member_can_fetch_shu_statement(self, db, member_client):
         resp = member_client.get("/api/v1/members/me/shu/")
