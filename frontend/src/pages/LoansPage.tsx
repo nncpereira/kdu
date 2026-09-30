@@ -117,10 +117,10 @@ export function LoansPage() {
                   className="border-b border-gray-100 hover:bg-gray-50"
                 >
                   <td className="py-2 px-2">
-                    <span className="font-mono text-xs">
+                    <div>{loan.full_name}</div>
+                    <div className="font-mono text-xs text-gray-500">
                       {loan.member_number}
-                    </span>{" "}
-                    {loan.full_name}
+                    </div>
                   </td>
                   <td className="py-2 px-2">
                     ${formatMoney(loan.principal_original)}

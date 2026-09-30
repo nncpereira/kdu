@@ -83,7 +83,7 @@ export function LoanDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">
-              Loan · {loan.member_number}
+              Loan · {loan.full_name}
             </h1>
             <p className="text-sm text-gray-500 font-mono">{loan.id}</p>
           </div>

@@ -99,7 +99,7 @@ export function ScheduledRepaymentModal({ loan, open, onClose }: Props) {
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="bg-gray-50 rounded p-3 text-sm">
-          <p className="font-medium">{loan.member_number}</p>
+          <p className="font-medium">{loan.full_name} - {loan.member_number}</p>
           <p className="text-gray-500">
             Outstanding: ${formatMoney(loan.principal_outstanding)} · Rate:{" "}
             {formatMoney((parseFloat(loan.monthly_rate) * 100).toFixed(2))}%/mo
