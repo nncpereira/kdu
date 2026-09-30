@@ -14,18 +14,23 @@ CASH = "1001"
 @transaction.atomic
 def post_reserve_allocation(calc: ShuCalculation, certifier_user) -> None:
     """
-    Dr 3900 Retained Surplus
+    Dr 3900 Retained Surplus (full net surplus allocated this cycle)
     Cr 3501 Reserva Legal
     Cr 3502 Admin & Operational Fund
+    Cr 3200 SHU Payable (Jasa Simpanan + Jasa Bunga owed to members,
+             drawn down by post_member_payouts() below as each member is paid)
     """
     if calc.reserve_journal_entry_id:
         return  # idempotent
 
-    lines = [(RETAINED_SURPLUS, "DEBIT", calc.reserva_legal_amt + calc.admin_fund_amt)]
+    member_pool = calc.jasa_simpanan_amt + calc.jasa_bunga_amt
+    lines = [(RETAINED_SURPLUS, "DEBIT", calc.total_allocated)]
     if calc.reserva_legal_amt > 0:
         lines.append((RESERVA_LEGAL, "CREDIT", calc.reserva_legal_amt))
     if calc.admin_fund_amt > 0:
         lines.append((ADMIN_FUND, "CREDIT", calc.admin_fund_amt))
+    if member_pool > 0:
+        lines.append((SHU_PAYABLE, "CREDIT", member_pool))
 
     je = post_journal_entry(
         description=f"SHU reserves – FY {calc.fy.year_start}–{calc.fy.year_end}",

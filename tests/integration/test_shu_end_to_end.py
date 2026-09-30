@@ -82,3 +82,9 @@ class TestShuFlow:
         # Payout cash reduced, reserve equity increased
         assert account_net_balance("3501") == Decimal("32615.30")
         assert account_net_balance("3502") == Decimal("32615.30")
+
+        # Regression: SHU Payable must be credited with the member pool
+        # (Jasa Simpanan + Jasa Bunga) before post_member_payouts() draws
+        # it down, or it's left with a permanent debit balance instead of
+        # returning to zero once every member has been paid.
+        assert account_net_balance("3200") == Decimal("0")
