@@ -12,6 +12,7 @@ REQUIRED_KEYS = {
     "shu_split",
     "obligatory_savings_monthly_cap",
     "loan_interest_rate_range",
+    "shu_annual_fee",
 }
 
 
@@ -147,6 +148,19 @@ def validate_obligatory_savings_cap(proposed) -> list[str]:
     return []
 
 
+def validate_shu_annual_fee(proposed) -> list[str]:
+    """Validates the plain-number shape for shu_annual_fee."""
+    try:
+        value = Decimal(str(proposed))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValidationError({"proposed_value": "Must be a number."}) from None
+    if value < 0:
+        raise ValidationError({"proposed_value": "Must be a non-negative number."})
+    if value > Decimal("1000"):
+        raise ValidationError({"proposed_value": "Fee seems unreasonably high."})
+    return []
+
+
 def validate_loan_interest_range(proposed: dict) -> list[str]:
     """Validates the {min: X, max: Y} shape for loan_interest_rate_range."""
     if not isinstance(proposed, dict):
@@ -170,6 +184,7 @@ _VALIDATORS = {
     "shu_split": validate_shu_split,
     "obligatory_savings_monthly_cap": validate_obligatory_savings_cap,
     "loan_interest_rate_range": validate_loan_interest_range,
+    "shu_annual_fee": validate_shu_annual_fee,
 }
 
 

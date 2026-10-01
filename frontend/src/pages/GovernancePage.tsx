@@ -6,12 +6,14 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 import { Table } from "@/components/Table";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { ProposeSplitModal } from "./governance/ProposeSplitModal";
+import { ProposeAnnualFeeModal } from "./governance/ProposeAnnualFeeModal";
 
 export function GovernancePage() {
   const { profile } = useAuth();
   const [proposeOpen, setProposeOpen] = useState(false);
+  const [proposeFeeOpen, setProposeFeeOpen] = useState(false);
 
   const configQuery = useQuery({
     queryKey: ["governance", "config"],
@@ -29,6 +31,11 @@ export function GovernancePage() {
   const split = configQuery.data?.find(
     (c) => c.parameter_key === "shu_split"
   );
+  const splitValue = split?.parameter_value as Record<string, unknown> | undefined;
+
+  const annualFee = configQuery.data?.find(
+    (c) => c.parameter_key === "shu_annual_fee"
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -40,9 +47,14 @@ export function GovernancePage() {
           </p>
         </div>
         {canPropose && (
-          <Button onClick={() => setProposeOpen(true)}>
-            + Propose SHU Split
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setProposeFeeOpen(true)}>
+              + Propose Annual Fee
+            </Button>
+            <Button onClick={() => setProposeOpen(true)}>
+              + Propose SHU Split
+            </Button>
+          </div>
         )}
       </div>
 
@@ -61,7 +73,7 @@ export function GovernancePage() {
               <div key={key} className="bg-gray-50 rounded p-3">
                 <p className="text-xs text-gray-500">{label}</p>
                 <p className="text-xl font-bold text-gray-800">
-                  {String(split.parameter_value[key])}%
+                  {String(splitValue?.[key])}%
                 </p>
               </div>
             ))}
@@ -70,6 +82,22 @@ export function GovernancePage() {
             Effective from {formatDate(split.effective_from)} · DL 76/2022
             Art. 69 requires Reserva Legal ≥ 25% until the reserve reaches
             100% of social capital.
+          </p>
+        </Card>
+      )}
+
+      {/* Active Annual Fee */}
+      {annualFee && (
+        <Card title="Active Annual Fee">
+          <div className="bg-gray-50 rounded p-3 inline-block">
+            <p className="text-xs text-gray-500">Deducted per member from SHU payout</p>
+            <p className="text-xl font-bold text-gray-800">
+              ${formatMoney(String(annualFee.parameter_value))}
+            </p>
+          </div>
+          <p className="text-xs text-gray-500 mt-4">
+            Effective from {formatDate(annualFee.effective_from)} · floored at
+            $0 per member, never collected as a negative payout.
           </p>
         </Card>
       )}
@@ -127,6 +155,10 @@ export function GovernancePage() {
       <ProposeSplitModal
         open={proposeOpen}
         onClose={() => setProposeOpen(false)}
+      />
+      <ProposeAnnualFeeModal
+        open={proposeFeeOpen}
+        onClose={() => setProposeFeeOpen(false)}
       />
     </div>
   );

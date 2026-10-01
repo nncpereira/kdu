@@ -97,8 +97,8 @@ class LoanInterestRangeSerializer(serializers.Serializer):
 
 # ====================================================================
 # Maps parameter_key -> shape serializer, for object-shaped values.
-# obligatory_savings_monthly_cap is a bare number, so it's validated
-# separately in ProposeChangeSerializer.validate() below.
+# obligatory_savings_monthly_cap and shu_annual_fee are bare numbers, so
+# they're validated separately in ProposeChangeSerializer.validate() below.
 # ====================================================================
 SHAPE_VALIDATORS = {
     "shu_split": ShuSplitValueSerializer,
@@ -115,6 +115,7 @@ class ProposeChangeSerializer(serializers.Serializer):
             "shu_split",
             "obligatory_savings_monthly_cap",
             "loan_interest_rate_range",
+            "shu_annual_fee",
         ]
     )
     proposed_value = serializers.JSONField()
@@ -128,7 +129,7 @@ class ProposeChangeSerializer(serializers.Serializer):
         key = attrs.get("parameter_key")
         value = attrs.get("proposed_value")
 
-        if key == "obligatory_savings_monthly_cap":
+        if key in ("obligatory_savings_monthly_cap", "shu_annual_fee"):
             field = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=0)
             try:
                 validated = field.run_validation(value)

@@ -3,7 +3,7 @@ import { api } from "./client";
 export interface GlobalConfig {
   id: string;
   parameter_key: string;
-  parameter_value: Record<string, unknown>;
+  parameter_value: unknown;
   effective_from: string;
   status: string;
 }
@@ -11,7 +11,7 @@ export interface GlobalConfig {
 export interface ConfigChange {
   id: string;
   parameter_key: string;
-  proposed_value: Record<string, unknown>;
+  proposed_value: unknown;
   effective_from: string;
   status: "PENDING_CHECK" | "PENDING_CERTIFY" | "CERTIFIED" | "REJECTED";
   warnings: string[];
@@ -25,7 +25,7 @@ export async function listActiveConfig(): Promise<GlobalConfig[]> {
 
 export async function proposeChange(payload: {
   parameter_key: string;
-  proposed_value: Record<string, unknown>;
+  proposed_value: unknown;
   effective_from: string;
 }): Promise<ConfigChange> {
   const { data } = await api.post<ConfigChange>(
