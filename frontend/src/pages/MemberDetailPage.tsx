@@ -264,6 +264,16 @@ export function MemberDetailPage() {
           <Row label="Created" value={formatDate(member.created_at)} />
           <Row label="Member Since" value={formatDate(member.date_joined)} />
           <Row
+            label="Endorsed By"
+            value={
+              member.endorser_1_number || member.endorser_2_number
+                ? [member.endorser_1_number, member.endorser_2_number]
+                    .filter(Boolean)
+                    .join(", ")
+                : "—"
+            }
+          />
+          <Row
             label="Last Activity"
             value={member.last_transaction_at ? formatDate(member.last_transaction_at) : "No activity yet"}
           />

@@ -80,9 +80,9 @@ export function DashboardPage() {
 
         <DashboardCard
           to="/savings"
-          title="Voluntary Savings"
-          value={`$${formatMoney(data.savings.voluntary_total)}`}
-          subtitle="Across all members"
+          title="Total Savings"
+          value={`$${formatMoney(data.savings.total_savings)}`}
+          subtitle="Principal + Mandatory + Voluntary"
           color="emerald"
         />
 

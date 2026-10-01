@@ -1,10 +1,12 @@
-import { FormEvent } from "react";
+import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
 import { Input, Select } from "@/components/Input";
 import { createMember, CreateMemberPayload } from "@/api/members";
+import { MemberPicker } from "../savings/MemberPicker";
 
 interface Props {
   open: boolean;
@@ -16,6 +18,9 @@ const SALUTATIONS = ["Mr", "Mrs", "Ms", "Dr", "Prof", "Rev"];
 
 export function CreateMemberModal({ open, onClose, onCreated }: Props) {
   const qc = useQueryClient();
+  const [endorser1Id, setEndorser1Id] = useState("");
+  const [endorser2Id, setEndorser2Id] = useState("");
+  const [endorserError, setEndorserError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -33,13 +38,29 @@ export function CreateMemberModal({ open, onClose, onCreated }: Props) {
     onSuccess: (member) => {
       qc.invalidateQueries({ queryKey: ["members"] });
       reset();
+      setEndorser1Id("");
+      setEndorser2Id("");
       onClose();
       onCreated?.(member.id);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.detail ?? "Failed to create member."
+      );
     },
   });
 
   async function onSubmit(data: CreateMemberPayload) {
-    await mutation.mutateAsync(data);
+    setEndorserError(null);
+    if (!endorser1Id || !endorser2Id) {
+      setEndorserError("Two endorsers are required to onboard a new member.");
+      return;
+    }
+    await mutation.mutateAsync({
+      ...data,
+      endorser_1: endorser1Id,
+      endorser_2: endorser2Id,
+    });
   }
 
   return (
@@ -85,9 +106,38 @@ export function CreateMemberModal({ open, onClose, onCreated }: Props) {
           <Input label="Municipio" {...register("municipio")} />
         </div>
 
+        <div className="pt-2 border-t border-gray-200">
+          <p className="text-xs text-gray-500 mb-3">
+            Two existing active members must endorse this application.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <MemberPicker
+              label="Endorser 1"
+              status="Active"
+              value={endorser1Id}
+              onChange={(id) => setEndorser1Id(id)}
+              excludeIds={endorser2Id ? [endorser2Id] : undefined}
+            />
+            <MemberPicker
+              label="Endorser 2"
+              status="Active"
+              value={endorser2Id}
+              onChange={(id) => setEndorser2Id(id)}
+              excludeIds={endorser1Id ? [endorser1Id] : undefined}
+            />
+          </div>
+        </div>
+
+        {endorserError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
+            {endorserError}
+          </div>
+        )}
+
         {mutation.isError && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
-            Failed to create member. Check the fields and try again.
+            {(mutation.error as any)?.response?.data?.detail ??
+              "Failed to create member. Check the fields and try again."}
           </div>
         )}
 

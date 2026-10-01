@@ -6,16 +6,24 @@ interface Props {
   value: string;
   onChange: (memberId: string, member: Member | null) => void;
   label?: string;
+  status?: string;
+  excludeIds?: string[];
 }
 
-export function MemberPicker({ value, onChange, label = "Member" }: Props) {
+export function MemberPicker({
+  value,
+  onChange,
+  label = "Member",
+  status,
+  excludeIds,
+}: Props) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
 
   const { data } = useQuery({
-    queryKey: ["members", "picker", search],
+    queryKey: ["members", "picker", search, status],
     queryFn: () =>
-      listMembers({ search: search || undefined, page_size: 20 }),
+      listMembers({ search: search || undefined, status, page_size: 20 }),
     enabled: open || search.length > 0,
   });
 
@@ -24,7 +32,9 @@ export function MemberPicker({ value, onChange, label = "Member" }: Props) {
     if (!open) setSearch("");
   }, [open]);
 
-  const results = data?.results ?? [];
+  const results = (data?.results ?? []).filter(
+    (m) => !excludeIds?.includes(m.id)
+  );
 
   return (
     <div className="relative">

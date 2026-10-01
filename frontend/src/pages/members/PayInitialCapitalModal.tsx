@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
 import { payInitialCapital } from "@/api/members";
 import type { Member } from "@/api/members";
 
@@ -13,15 +12,24 @@ interface Props {
   onClose: () => void;
 }
 
+const STANDARD_CAPITAL = "150.00";
+const STANDARD_FIRST_MONTH_SAVINGS = "20.00";
+const STANDARD_ENTRANCE_FEE = "5.00";
+const STANDARD_TOTAL = "175.00";
+
 export function PayInitialCapitalModal({ member, open, onClose }: Props) {
   const qc = useQueryClient();
-  const [amount, setAmount] = useState("50.00");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (amt: string) => payInitialCapital(member!.id, amt),
+    mutationFn: () =>
+      payInitialCapital(member!.id, {
+        amount: STANDARD_CAPITAL,
+        first_month_savings: STANDARD_FIRST_MONTH_SAVINGS,
+        entrance_fee: STANDARD_ENTRANCE_FEE,
+      }),
     onSuccess: () => {
-      toast.success("Initial capital submitted for approval.");
+      toast.success("Initial payment submitted for approval.");
       qc.invalidateQueries({ queryKey: ["members"] });
       qc.invalidateQueries({ queryKey: ["member", member!.id] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
@@ -30,11 +38,7 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail ?? "Action failed.");
-      const detail =
-        err?.response?.data?.detail ??
-        err?.response?.data?.fields?.amount?.[0] ??
-        "Payment failed.";
-      setError(detail);
+      setError(err?.response?.data?.detail ?? "Payment failed.");
     },
   });
 
@@ -43,7 +47,7 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    await mutation.mutateAsync(amount);
+    await mutation.mutateAsync();
   }
 
   return (
@@ -57,18 +61,28 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
           </p>
         </div>
 
-        <Input
-          label="Amount (USD)"
-          type="number"
-          step="0.01"
-          min="50"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
+        <div className="border border-gray-200 rounded p-3 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Principal savings (capital)</span>
+            <span className="font-medium">${STANDARD_CAPITAL}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">First month's mandatory savings</span>
+            <span className="font-medium">${STANDARD_FIRST_MONTH_SAVINGS}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Entrance / admin / booklet fee</span>
+            <span className="font-medium">${STANDARD_ENTRANCE_FEE}</span>
+          </div>
+          <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold">
+            <span>Total cash due upfront</span>
+            <span>${STANDARD_TOTAL}</span>
+          </div>
+        </div>
         <p className="text-xs text-gray-500">
-          Minimum: $50.00 (DL 76/2022 Art. 19). This creates a Maker-Checker-Certifier
-          pipeline; the member is activated after all three stages.
+          Confirms the member has brought the standard ${STANDARD_TOTAL} cash
+          due at signup. This creates a Maker-Checker-Certifier pipeline; the
+          member is activated after all three stages.
         </p>
 
         {error && (
@@ -82,7 +96,7 @@ export function PayInitialCapitalModal({ member, open, onClose }: Props) {
             Cancel
           </Button>
           <Button type="submit" loading={mutation.isPending}>
-            Submit Payment
+            Confirm Payment Received
           </Button>
         </div>
       </form>

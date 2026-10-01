@@ -17,6 +17,7 @@ import { TableSkeleton } from "@/components/Skeleton";
 import { DatePicker } from "@/components/DatePicker";
 import { downloadBlob } from "@/lib/download";
 import { formatMoney, formatDate } from "@/lib/format";
+import { JournalEntryDetailModal } from "@/pages/JournalEntryDetailModal";
 
 type Tab = "system" | "ledger";
 
@@ -317,6 +318,7 @@ function LedgerActivityTab() {
   const [start, setStart] = useState(thirtyDaysAgo);
   const [end, setEnd] = useState(today);
   const [reversalsOnly, setReversalsOnly] = useState(false);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["audit", "ledger", start, end, reversalsOnly],
@@ -373,7 +375,8 @@ function LedgerActivityTab() {
               rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-gray-100 hover:bg-gray-50"
+                  onClick={() => setSelectedEntryId(row.id)}
+                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                 >
                   <td className="py-2 px-2 text-xs text-gray-500 whitespace-nowrap">
                     {formatDate(row.entry_date)}
@@ -415,6 +418,11 @@ function LedgerActivityTab() {
           </p>
         )}
       </Card>
+
+      <JournalEntryDetailModal
+        entryId={selectedEntryId}
+        onClose={() => setSelectedEntryId(null)}
+      />
     </div>
   );
 }
