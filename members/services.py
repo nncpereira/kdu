@@ -39,6 +39,16 @@ def provision_member_user(member: Member) -> User:
 MIN_MEMBER_CAPITAL = Decimal("50.00")  # DL 76/2022, Art. 19
 MIN_COOP_CAPITAL = Decimal("5000.00")  # DL 76/2022, Art. 18
 
+# Board-approved amounts collected upfront from every new member (total $175):
+#   Principal savings (one-time capital)      $150
+#   First month's mandatory/obligatory saving   $20
+#   Entrance/admin/booklet fee (non-refundable)  $5
+STANDARD_INITIAL_CAPITAL = Decimal("150.00")
+STANDARD_FIRST_MONTH_SAVINGS = Decimal("20.00")
+STANDARD_ENTRANCE_FEE = Decimal("5.00")
+
+ENTRANCE_FEE_INCOME = "40200"
+
 
 # ====================================================================
 # Onboarding
@@ -59,6 +69,8 @@ def onboard_member(
     middle_name="",
     salutation="Mr",
     email=None,
+    endorser_1: Member,
+    endorser_2: Member,
     maker_user,
 ) -> Member:
     """
@@ -67,6 +79,20 @@ def onboard_member(
     """
     if not first_name or not last_name:
         raise ValidationError("First and last name are required.")
+    if today().month == 6:
+        raise ValidationError(
+            "NEW_MEMBERS_CLOSED_IN_JUNE: no new members are accepted in June, "
+            "the last month of the fiscal year."
+        )
+    if endorser_1 is None or endorser_2 is None:
+        raise ValidationError("Two endorsers are required to onboard a new member.")
+    if endorser_1.id == endorser_2.id:
+        raise ValidationError("The two endorsers must be different members.")
+    if (
+        endorser_1.status != Member.Status.ACTIVE
+        or endorser_2.status != Member.Status.ACTIVE
+    ):
+        raise ValidationError("Endorsers must be active members.")
 
     member = Member.objects.create(
         first_name=first_name,
@@ -83,14 +109,33 @@ def onboard_member(
         municipio=municipio,
         profession=profession,
         status=Member.Status.PENDING,
+        endorser_1=endorser_1,
+        endorser_2=endorser_2,
     )
     return member
 
 
 @transaction.atomic
-def pay_initial_capital(*, member, amount, maker_user, entry_date=None):
+def pay_initial_capital(
+    *,
+    member,
+    amount,
+    maker_user,
+    entry_date=None,
+    first_month_savings=Decimal("0"),
+    entrance_fee=Decimal("0"),
+):
+    """
+    Record the cash a new member brings upfront. `amount` is the one-time
+    capital (Simpanan Pokok); `first_month_savings` and `entrance_fee` are
+    optional on top of it (the standard onboarding flow passes the board-
+    approved $20 / $5, but existing callers that only ever charged capital
+    keep working unchanged since both default to zero).
+    """
     entry_date = entry_date or today()
     amount = round_money(Decimal(str(amount)))
+    first_month_savings = round_money(Decimal(str(first_month_savings)))
+    entrance_fee = round_money(Decimal(str(entrance_fee)))
 
     if member.status != Member.Status.PENDING:
         raise ValidationError("Initial capital is only payable for PENDING members.")
@@ -99,20 +144,44 @@ def pay_initial_capital(*, member, amount, maker_user, entry_date=None):
             f"MIN_CAPITAL_50_USD_REQUIRED: minimum is {MIN_MEMBER_CAPITAL}."
         )
 
+    total_cash = amount + first_month_savings + entrance_fee
+    lines = [("1001", "DEBIT", total_cash)]
+    # Both capital and the first month's mandatory savings build the
+    # member's own Kapital Sosial, same as a normal obligatory deposit.
+    lines.append(("3101", "CREDIT", amount + first_month_savings, member))
+    if entrance_fee > 0:
+        lines.append((ENTRANCE_FEE_INCOME, "CREDIT", entrance_fee, member))
+
     je = post_journal_entry(
         description=f"Initial capital for {member.membership_number}",
-        lines=[
-            ("1001", "DEBIT", amount),
-            ("3101", "CREDIT", amount, member),
-        ],
+        lines=lines,
         created_by=maker_user,
         entry_date=entry_date,
     )
+
+    # Record the first month's savings as a normal Transaction too, so it
+    # counts toward that month's obligatory cap like any other deposit.
+    obligatory_txn = None
+    if first_month_savings > 0:
+        from savings.models import Transaction as SavingsTxn
+
+        obligatory_txn = SavingsTxn.objects.create(
+            member=member,
+            transaction_type=SavingsTxn.Type.DEPOSIT,
+            requested_amount=first_month_savings,
+            obligatory_portion=first_month_savings,
+            voluntary_portion=Decimal("0"),
+            status=SavingsTxn.Status.PENDING_CHECK,
+            journal_entry=je,
+        )
 
     # 1. Create the onboarding record WITHOUT the pipeline actor.
     onboarding = MemberOnboarding.objects.create(
         member=member,
         initial_capital_amount=amount,
+        first_month_savings_amount=first_month_savings,
+        entrance_fee_amount=entrance_fee,
+        obligatory_transaction=obligatory_txn,
         journal_entry=je,
         status=MemberOnboarding.Status.PENDING_CHECK,
     )

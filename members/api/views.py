@@ -17,7 +17,14 @@ from members.api.serializers import (
     MemberSerializer,
 )
 from members.models import Member
-from members.services import onboard_member, pay_initial_capital, request_exit
+from members.services import (
+    STANDARD_ENTRANCE_FEE,
+    STANDARD_FIRST_MONTH_SAVINGS,
+    STANDARD_INITIAL_CAPITAL,
+    onboard_member,
+    pay_initial_capital,
+    request_exit,
+)
 from users.services import create_member_user, issue_temp_password
 
 
@@ -119,7 +126,13 @@ class PayInitialCapitalView(APIView):
         serializer.is_valid(raise_exception=True)
         onboarding = pay_initial_capital(
             member=member,
-            amount=serializer.validated_data["amount"],
+            amount=serializer.validated_data.get("amount", STANDARD_INITIAL_CAPITAL),
+            first_month_savings=serializer.validated_data.get(
+                "first_month_savings", STANDARD_FIRST_MONTH_SAVINGS
+            ),
+            entrance_fee=serializer.validated_data.get(
+                "entrance_fee", STANDARD_ENTRANCE_FEE
+            ),
             maker_user=request.user.profile,
         )
         return Response(

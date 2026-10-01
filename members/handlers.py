@@ -58,6 +58,12 @@ def on_onboarding_certified(actor, certifier_user):
         member.save(update_fields=["status", "updated_at"])
         provision_member_user(member)
 
+    if onboarding.obligatory_transaction_id:
+        from savings.models import Transaction as SavingsTxn
+
+        onboarding.obligatory_transaction.status = SavingsTxn.Status.COMPLETED
+        onboarding.obligatory_transaction.save(update_fields=["status", "updated_at"])
+
     onboarding.status = MemberOnboarding.Status.COMPLETED
     onboarding.save(update_fields=["status", "updated_at"])
 
@@ -68,6 +74,12 @@ def on_onboarding_rejected(actor, rejector_user, reason):
     onboarding = MemberOnboarding.objects.select_for_update().get(
         pk=actor.target_record_id  # ← was: pipeline_actor=actor
     )
+    if onboarding.obligatory_transaction_id:
+        from savings.models import Transaction as SavingsTxn
+
+        onboarding.obligatory_transaction.status = SavingsTxn.Status.REJECTED
+        onboarding.obligatory_transaction.save(update_fields=["status", "updated_at"])
+
     onboarding.status = MemberOnboarding.Status.REJECTED
     onboarding.save(update_fields=["status", "updated_at"])
 

@@ -390,7 +390,7 @@ class TestPermissionsHTTP:
 # Members
 # ====================================================================
 class TestMembersHTTP:
-    def test_maker_can_create_member(self, db, api_for, maker):
+    def test_maker_can_create_member(self, db, api_for, maker, maria, ana):
         client = api_for(maker)
         payload = {
             "first_name": "Test",
@@ -403,6 +403,8 @@ class TestMembersHTTP:
             "posto": "P",
             "municipio": "Dili",
             "profession": "Farmer",
+            "endorser_1": str(maria.id),
+            "endorser_2": str(ana.id),
         }
         resp = client.post("/api/v1/members/", payload, format="json")
         assert resp.status_code == 201, resp.content
@@ -462,7 +464,7 @@ class TestMembersHTTP:
         resp = client.get("/api/v1/members/00000000-0000-0000-0000-000000000000/")
         assert resp.status_code == 404
 
-    def test_pay_initial_capital_below_minimum(self, db, api_for, maker):
+    def test_pay_initial_capital_below_minimum(self, db, api_for, maker, maria, ana):
         client = api_for(maker)
         # Create a fresh pending member
         r = client.post(
@@ -472,6 +474,8 @@ class TestMembersHTTP:
                 "last_name": "Cap",
                 "phone_number": "77000222",
                 "date_of_birth": "1990-01-01",
+                "endorser_1": str(maria.id),
+                "endorser_2": str(ana.id),
             },
             format="json",
         )
@@ -485,7 +489,7 @@ class TestMembersHTTP:
         assert resp.status_code == 400
 
     def test_pay_initial_capital_and_run_pipeline(
-        self, db, api_for, maker, checker, certifier
+        self, db, api_for, maker, checker, certifier, maria, ana
     ):
         maker_c = api_for(maker)
         checker_c = api_for(checker)
@@ -498,6 +502,8 @@ class TestMembersHTTP:
                 "last_name": "Doe",
                 "phone_number": "77000333",
                 "date_of_birth": "1990-01-01",
+                "endorser_1": str(maria.id),
+                "endorser_2": str(ana.id),
             },
             format="json",
         )
@@ -505,7 +511,7 @@ class TestMembersHTTP:
 
         r2 = maker_c.post(
             f"/api/v1/members/{member_id}/initial-capital/",
-            {"amount": "50.00"},
+            {"amount": "50.00", "first_month_savings": "0", "entrance_fee": "0"},
             format="json",
         )
         assert r2.status_code == 201, r2.content
@@ -528,7 +534,7 @@ class TestMembersHTTP:
         assert onboarding["status"] == "COMPLETED"
         assert onboarding["initial_capital_amount"] == "50.00"
 
-    def test_capital_history_empty_for_new_member(self, db, api_for, maker):
+    def test_capital_history_empty_for_new_member(self, db, api_for, maker, maria, ana):
         maker_c = api_for(maker)
         r = maker_c.post(
             "/api/v1/members/",
@@ -537,6 +543,8 @@ class TestMembersHTTP:
                 "last_name": "Member",
                 "phone_number": "77000444",
                 "date_of_birth": "1990-01-01",
+                "endorser_1": str(maria.id),
+                "endorser_2": str(ana.id),
             },
             format="json",
         )
@@ -2360,7 +2368,7 @@ class TestPipelineHTTP:
         assert "Deposit" in summary["label"]
         assert summary["amount"] == "100.00"
 
-    def test_member_onboard_summary(self, db, api_for, maker, checker):
+    def test_member_onboard_summary(self, db, api_for, maker, checker, maria, ana):
         maker_c = api_for(maker)
 
         # Create a pending member
@@ -2368,6 +2376,8 @@ class TestPipelineHTTP:
             "first_name": "Sum", "last_name": "Mary",
             "phone_number": "77000888",
             "date_of_birth": "1990-01-01",
+            "endorser_1": str(maria.id),
+            "endorser_2": str(ana.id),
         }, format="json")
         member_id = r.data["id"]
 

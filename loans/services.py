@@ -32,6 +32,12 @@ def originate_loan(
     """
     Create a DRAFT loan. Disbursement happens after pipeline certification.
     """
+    if today().month in (5, 6):
+        raise ValidationError(
+            "LOAN_APPLICATIONS_CLOSED: loan applications are not accepted in "
+            "May or June, the last two months of the fiscal year."
+        )
+
     principal = round_money(Decimal(str(principal)))
     monthly_rate = Decimal(str(monthly_rate))
 

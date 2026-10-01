@@ -8,6 +8,12 @@ class MemberSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     has_login = serializers.SerializerMethodField()
     login_username = serializers.SerializerMethodField()
+    endorser_1_number = serializers.CharField(
+        source="endorser_1.membership_number", read_only=True, default=None
+    )
+    endorser_2_number = serializers.CharField(
+        source="endorser_2.membership_number", read_only=True, default=None
+    )
 
     class Meta:
         model = Member
@@ -35,6 +41,8 @@ class MemberSerializer(serializers.ModelSerializer):
             "date_joined",
             "last_transaction_at",
             "created_at",
+            "endorser_1_number",
+            "endorser_2_number",
         ]
         read_only_fields = [
             "id",
@@ -68,6 +76,19 @@ class MemberCreateSerializer(serializers.Serializer):
     posto = serializers.CharField(required=False, allow_blank=True, default="")
     municipio = serializers.CharField(required=False, allow_blank=True, default="")
     profession = serializers.CharField(required=False, allow_blank=True, default="")
+    endorser_1 = serializers.PrimaryKeyRelatedField(
+        queryset=Member.objects.filter(status=Member.Status.ACTIVE)
+    )
+    endorser_2 = serializers.PrimaryKeyRelatedField(
+        queryset=Member.objects.filter(status=Member.Status.ACTIVE)
+    )
+
+    def validate(self, attrs):
+        if attrs["endorser_1"].id == attrs["endorser_2"].id:
+            raise serializers.ValidationError(
+                {"endorser_2": "The two endorsers must be different members."}
+            )
+        return attrs
 
 
 class UpdateMyMemberSerializer(serializers.Serializer):
@@ -87,7 +108,18 @@ class UpdateMyMemberSerializer(serializers.Serializer):
 
 
 class InitialCapitalSerializer(serializers.Serializer):
-    amount = serializers.DecimalField(max_digits=18, decimal_places=2)
+    # Defaults to the board-approved standard amounts ($150 capital + $20
+    # first month's mandatory savings + $5 entrance fee = $175 upfront).
+    # Override only for a documented exception.
+    amount = serializers.DecimalField(
+        max_digits=18, decimal_places=2, required=False
+    )
+    first_month_savings = serializers.DecimalField(
+        max_digits=18, decimal_places=2, required=False
+    )
+    entrance_fee = serializers.DecimalField(
+        max_digits=18, decimal_places=2, required=False
+    )
 
 
 class MemberExitSerializer(serializers.Serializer):
@@ -100,6 +132,8 @@ class MemberOnboardingSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "initial_capital_amount",
+            "first_month_savings_amount",
+            "entrance_fee_amount",
             "status",
             "created_at",
         ]
