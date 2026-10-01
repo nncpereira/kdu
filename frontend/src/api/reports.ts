@@ -37,7 +37,11 @@ export interface SurplusDistribution {
 
 export interface DashboardSummary {
   members: { active: number; pending: number; dormant: number };
-  savings: { voluntary_total: string };
+  savings: {
+    voluntary_total: string;
+    kapital_sosial_total: string;
+    total_savings: string;
+  };
   loans: { disbursed: number; outstanding_total: string };
   pipeline: { pending_check: number; pending_certify: number };
   recent_activity: {

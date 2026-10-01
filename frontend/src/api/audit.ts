@@ -61,6 +61,30 @@ export interface LedgerActivityResponse {
   results: LedgerActivity[];
 }
 
+export interface JournalLine {
+  id: string;
+  account_code: string;
+  account_name: string;
+  entry_type: "DEBIT" | "CREDIT";
+  amount: string;
+  member_id: string | null;
+  member_number: string | null;
+  member_name: string | null;
+}
+
+export interface JournalEntryDetail {
+  id: string;
+  entry_date: string;
+  description: string;
+  status: string;
+  maker_username: string | null;
+  certifier_username: string | null;
+  is_reversal: boolean;
+  original_journal_entry: string | null;
+  created_at: string;
+  lines: JournalLine[];
+}
+
 export interface AuditFilters {
   start?: string;
   end?: string;
@@ -98,4 +122,9 @@ export async function listLedgerActivity(
 
 export function auditExportUrl(filters: AuditFilters = {}): string {
   return `/audit/log/export/?${buildQuery(filters)}`;
+}
+
+export async function getJournalEntry(id: string): Promise<JournalEntryDetail> {
+  const { data } = await api.get<JournalEntryDetail>(`/audit/ledger/${id}/`);
+  return data;
 }

@@ -29,8 +29,10 @@ export interface Member {
   date_joined: string;
   last_transaction_at: string | null;
   created_at: string;
-  has_login: boolean;            
-  login_username: string | null; 
+  has_login: boolean;
+  login_username: string | null;
+  endorser_1_number: string | null;
+  endorser_2_number: string | null;
 }
 
 export interface Paginated<T> {
@@ -54,6 +56,8 @@ export interface CreateMemberPayload {
   posto?: string;
   municipio?: string;
   profession?: string;
+  endorser_1: string;
+  endorser_2: string;
 }
 
 export interface PipelineResponse {
@@ -152,11 +156,15 @@ export async function createMember(
 
 export async function payInitialCapital(
   memberId: string,
-  amount: string
+  payload: {
+    amount: string;
+    first_month_savings?: string;
+    entrance_fee?: string;
+  }
 ): Promise<PipelineResponse> {
   const { data } = await api.post<PipelineResponse>(
     `/members/${memberId}/initial-capital/`,
-    { amount }
+    payload
   );
   return data;
 }

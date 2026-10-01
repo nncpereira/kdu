@@ -30,6 +30,10 @@ def dashboard_summary():
     voluntary_total = MemberVoluntaryDeposit.objects.aggregate(
         t=Sum("balance_available")
     )["t"] or Decimal("0")
+    kapital_sosial_total = Member.objects.aggregate(
+        t=Sum("kapital_sosial_balance")
+    )["t"] or Decimal("0")
+    total_savings = voluntary_total + kapital_sosial_total
 
     loans_disbursed = Loan.objects.filter(status="DISBURSED").count()
     outstanding_total = Loan.objects.filter(status="DISBURSED").aggregate(
@@ -93,7 +97,11 @@ def dashboard_summary():
             "pending": members_pending,
             "dormant": members_dormant,
         },
-        "savings": {"voluntary_total": str(voluntary_total)},
+        "savings": {
+            "voluntary_total": str(voluntary_total),
+            "kapital_sosial_total": str(kapital_sosial_total),
+            "total_savings": str(total_savings),
+        },
         "loans": {
             "disbursed": loans_disbursed,
             "outstanding_total": str(outstanding_total),

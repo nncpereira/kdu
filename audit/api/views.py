@@ -12,7 +12,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from audit.api.serializers import AuditLogSerializer, LedgerActivitySerializer
+from accounting.models import Account
+from audit.api.serializers import (
+    AuditLogSerializer,
+    JournalEntryDetailSerializer,
+    LedgerActivitySerializer,
+)
 from audit.models import AuditLog
 from audit.notifications import get_notifications_for
 from core.permissions import IsBoardOrChecker
@@ -286,6 +291,64 @@ class LedgerActivityListView(APIView):
                 "results": LedgerActivitySerializer(data, many=True).data,
             }
         )
+
+
+class LedgerActivityDetailView(APIView):
+    """Full detail of a single journal entry, including its debit/credit lines."""
+
+    permission_classes = [CanReadAudit]
+
+    @extend_schema(
+        responses={200: JournalEntryDetailSerializer},
+        tags=["audit"],
+        summary="Get a single journal entry with its debit/credit lines",
+    )
+    def get(self, request, pk):
+        entry = get_object_or_404(
+            JournalEntry.objects.select_related("created_by__user", "certified_by__user"),
+            pk=pk,
+        )
+        lines = entry.lines.select_related("member").order_by("created_at")
+        account_names = dict(
+            Account.objects.filter(
+                account_code__in={line.account_code for line in lines}
+            ).values_list("account_code", "account_name")
+        )
+
+        data = {
+            "id": entry.id,
+            "entry_date": entry.entry_date,
+            "description": entry.description,
+            "status": entry.status,
+            "maker_username": (
+                entry.created_by.user.username if entry.created_by else None
+            ),
+            "certifier_username": (
+                entry.certified_by.user.username if entry.certified_by else None
+            ),
+            "is_reversal": entry.original_journal_entry_id is not None,
+            "original_journal_entry": entry.original_journal_entry_id,
+            "created_at": entry.created_at,
+            "lines": [
+                {
+                    "id": line.id,
+                    "account_code": line.account_code,
+                    "account_name": account_names.get(
+                        line.account_code, line.account_code
+                    ),
+                    "entry_type": line.entry_type,
+                    "amount": line.amount,
+                    "member_id": line.member_id,
+                    "member_number": (
+                        line.member.membership_number if line.member else None
+                    ),
+                    "member_name": line.member.full_name if line.member else None,
+                }
+                for line in lines
+            ],
+        }
+
+        return Response(JournalEntryDetailSerializer(data).data)
 
 
 # ====================================================================
