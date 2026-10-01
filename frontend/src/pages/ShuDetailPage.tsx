@@ -369,7 +369,8 @@ export function ShuDetailPage() {
                   "Member",
                   "Jasa Simpanan",
                   "Jasa Bunga",
-                  "Total Payout",
+                  "Annual Fee",
+                  "Net Payout",
                 ]}
                 empty={payoutsQuery.data.length === 0}
               >
@@ -417,13 +418,18 @@ export function ShuDetailPage() {
                         <td className="py-2 px-2">
                           ${formatMoney(p.jasa_bunga_gross)}
                         </td>
+                        <td className="py-2 px-2 text-orange-700">
+                          {parseFloat(p.annual_fee_deducted) > 0
+                            ? `-$${formatMoney(p.annual_fee_deducted)}`
+                            : "—"}
+                        </td>
                         <td className="py-2 px-2 font-medium">
                           ${formatMoney(p.net_payout)}
                         </td>
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={4} className="bg-gray-50 p-0">
+                          <td colSpan={5} className="bg-gray-50 p-0">
                             <PayoutDetailPanel calcId={calcId!} payout={p} />
                           </td>
                         </tr>
@@ -505,6 +511,21 @@ function PayoutDetailPanel({
           interest × ${formatMoney(d.jasa_bunga_pool)} pool ={" "}
           <span className="font-medium text-gray-800">
             ${formatMoney(d.jasa_bunga_gross)}
+          </span>
+        </p>
+        {parseFloat(d.annual_fee_deducted) > 0 && (
+          <p>
+            <span className="font-medium text-gray-800">Annual Fee:</span>{" "}
+            <span className="text-orange-700">
+              -${formatMoney(d.annual_fee_deducted)}
+            </span>{" "}
+            (deducted from Jasa Simpanan + Jasa Bunga)
+          </p>
+        )}
+        <p className="pt-1 border-t border-gray-100">
+          <span className="font-medium text-gray-800">Net Payout:</span>{" "}
+          <span className="font-medium text-gray-800">
+            ${formatMoney(d.net_payout)}
           </span>
         </p>
       </div>

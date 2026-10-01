@@ -102,6 +102,7 @@ export interface PortalShuPayout {
   fiscal_year_end: string;
   jasa_simpanan_gross: string;
   jasa_bunga_gross: string;
+  annual_fee_deducted: string;
   net_payout: string;
   status: string;
 }

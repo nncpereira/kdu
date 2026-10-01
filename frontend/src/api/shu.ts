@@ -44,6 +44,7 @@ export interface ShuPayout {
   full_name: string;
   jasa_simpanan_gross: string;
   jasa_bunga_gross: string;
+  annual_fee_deducted: string;
   net_payout: string;
   status: string;
 }
@@ -129,6 +130,7 @@ export interface ShuPayoutDetail {
   jasa_bunga_pool: string;
   jasa_simpanan_gross: string;
   jasa_bunga_gross: string;
+  annual_fee_deducted: string;
   net_payout: string;
 }
 

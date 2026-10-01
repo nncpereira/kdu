@@ -76,7 +76,8 @@ export function PortalStatementPage() {
                 "Fiscal Year",
                 "Jasa Simpanan",
                 "Jasa Bunga",
-                "Total Payout",
+                "Annual Fee",
+                "Net Payout",
                 "Status",
               ]}
               empty={false}
@@ -92,6 +93,11 @@ export function PortalStatementPage() {
                   </td>
                   <td className="py-3 px-2 text-sm">
                     ${formatMoney(p.jasa_bunga_gross)}
+                  </td>
+                  <td className="py-3 px-2 text-sm text-orange-700">
+                    {parseFloat(p.annual_fee_deducted) > 0
+                      ? `-$${formatMoney(p.annual_fee_deducted)}`
+                      : "—"}
                   </td>
                   <td className="py-3 px-2 font-semibold">
                     ${formatMoney(p.net_payout)}
