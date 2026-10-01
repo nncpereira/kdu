@@ -69,6 +69,23 @@ class Member(TimeStampedModel):
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
 
+    # Two existing members who vouched for this applicant at signup.
+    # Nullable for members who joined before this requirement existed.
+    endorser_1 = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="endorsed_as_first",
+    )
+    endorser_2 = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="endorsed_as_second",
+    )
+
     # Cached Kapital Sosial balance (maintained by ledger handler)
     kapital_sosial_balance = models.DecimalField(
         max_digits=18, decimal_places=2, default=0
@@ -115,6 +132,24 @@ class MemberOnboarding(UUIDTimeStampedModel):
         "members.Member", on_delete=models.PROTECT, related_name="onboardings"
     )
     initial_capital_amount = models.DecimalField(max_digits=18, decimal_places=2)
+    # The first month's mandatory savings and the one-time entrance/admin/
+    # booklet fee, both collected alongside the initial capital at signup.
+    first_month_savings_amount = models.DecimalField(
+        max_digits=18, decimal_places=2, default=0
+    )
+    entrance_fee_amount = models.DecimalField(
+        max_digits=18, decimal_places=2, default=0
+    )
+    # Tracks the first month's mandatory savings as a normal savings
+    # Transaction too, so it counts toward that month's obligatory cap
+    # the same way any other deposit would.
+    obligatory_transaction = models.ForeignKey(
+        "savings.Transaction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="member_onboarding",
+    )
     journal_entry = models.ForeignKey(
         "ledger.JournalEntry",
         on_delete=models.PROTECT,
