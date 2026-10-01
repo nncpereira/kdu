@@ -258,6 +258,7 @@ class ShuPayoutListView(APIView):
                     "full_name": m.full_name,
                     "jasa_simpanan_gross": "0.00",
                     "jasa_bunga_gross": "0.00",
+                    "annual_fee_deducted": "0.00",
                     "net_payout": "0.00",
                     "status": "NOT_ELIGIBLE",
                 }
@@ -330,6 +331,7 @@ class ShuPayoutDetailView(APIView):
             "jasa_bunga_pool": calc.jasa_bunga_amt,
             "jasa_simpanan_gross": payout.jasa_simpanan_gross,
             "jasa_bunga_gross": payout.jasa_bunga_gross,
+            "annual_fee_deducted": payout.annual_fee_deducted,
             "net_payout": payout.net_payout,
         }
         return Response(ShuMemberPayoutDetailSerializer(data).data)

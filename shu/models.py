@@ -145,6 +145,9 @@ class ShuMemberPayout(UUIDTimeStampedModel):
     )
     jasa_simpanan_gross = models.DecimalField(max_digits=18, decimal_places=2)
     jasa_bunga_gross = models.DecimalField(max_digits=18, decimal_places=2)
+    annual_fee_deducted = models.DecimalField(
+        max_digits=18, decimal_places=2, default=0
+    )
     net_payout = models.DecimalField(max_digits=18, decimal_places=2)
     journal_entry = models.ForeignKey(
         "ledger.JournalEntry",

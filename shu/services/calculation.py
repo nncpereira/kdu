@@ -132,6 +132,8 @@ def compute_member_payouts(calc: ShuCalculation) -> int:
     if total_units == 0 and total_interest == 0:
         raise ValidationError("No weighting data — run snapshot & aggregation first.")
 
+    annual_fee = Decimal(str(get_active_value("shu_annual_fee", as_of=calc.fy.year_end) or 0))
+
     count = 0
     for r in rows:
         jasa_s = (
@@ -144,16 +146,24 @@ def compute_member_payouts(calc: ShuCalculation) -> int:
             if total_interest
             else Decimal("0.00")
         )
-        net = jasa_s + jasa_b
+        gross = jasa_s + jasa_b
 
-        if net <= 0:
+        if gross <= 0:
             continue
+
+        # The annual membership fee is deducted from the member's own
+        # payout, floored at zero rather than going negative — a member
+        # whose SHU share doesn't cover the fee simply nets to $0 here
+        # (collecting the shortfall separately is a different workflow).
+        fee = min(annual_fee, gross)
+        net = gross - fee
 
         ShuMemberPayout.objects.create(
             calc=calc,
             member=r.member,
             jasa_simpanan_gross=jasa_s,
             jasa_bunga_gross=jasa_b,
+            annual_fee_deducted=fee,
             net_payout=net,
             status=ShuMemberPayout.Status.DRAFT,
         )
@@ -164,7 +174,14 @@ def compute_member_payouts(calc: ShuCalculation) -> int:
 def _compute_fy_totals(year_start, year_end) -> dict:
     """
     Totals from the immutable ledger, as of `year_end`:
-      - net_surplus              = revenue − expenses for the period
+      - net_surplus              = gross revenue for the period (NOT
+                                    revenue minus expenses -- the
+                                    cooperative's documented practice
+                                    splits the full interest income four
+                                    ways, with the Admin & Operational
+                                    Fund share meant to *fund* expenses
+                                    rather than have them netted out
+                                    beforehand)
       - kapital_sosial           = net balance of 3101
       - accumulated_reserva_legal = net balance of 3501
     """
@@ -173,7 +190,7 @@ def _compute_fy_totals(year_start, year_end) -> dict:
 
     inc = income_statement(year_start, year_end)
     return {
-        "net_surplus": inc["net_surplus"],
+        "net_surplus": inc["total_revenue"],
         "kapital_sosial": account_net_balance("3101", as_of=year_end),
         "accumulated_reserva_legal": account_net_balance("3501", as_of=year_end),
     }

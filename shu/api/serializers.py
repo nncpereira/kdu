@@ -37,6 +37,7 @@ class ShuMemberPayoutDetailSerializer(serializers.Serializer):
 
     jasa_simpanan_gross = serializers.DecimalField(max_digits=18, decimal_places=2)
     jasa_bunga_gross = serializers.DecimalField(max_digits=18, decimal_places=2)
+    annual_fee_deducted = serializers.DecimalField(max_digits=18, decimal_places=2)
     net_payout = serializers.DecimalField(max_digits=18, decimal_places=2)
 
 
@@ -75,6 +76,7 @@ class ShuMemberPayoutSerializer(serializers.ModelSerializer):
             "full_name",
             "jasa_simpanan_gross",
             "jasa_bunga_gross",
+            "annual_fee_deducted",
             "net_payout",
             "status",
         ]
@@ -115,6 +117,7 @@ class MyShuPayoutSerializer(serializers.ModelSerializer):
             "fiscal_year_end",
             "jasa_simpanan_gross",
             "jasa_bunga_gross",
+            "annual_fee_deducted",
             "net_payout",
             "status",
         ]
