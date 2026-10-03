@@ -91,6 +91,33 @@ class MemberCreateSerializer(serializers.Serializer):
         return attrs
 
 
+class MemberUpdateSerializer(serializers.ModelSerializer):
+    """
+    Fields staff can edit on an existing member: personal info, contact,
+    and address. Excludes membership_number, status, balances, user link,
+    and endorsers — those are governed by other flows.
+    """
+
+    class Meta:
+        model = Member
+        fields = [
+            "salutation",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "national_id",
+            "phone_number",
+            "email",
+            "date_of_birth",
+            "aldeia",
+            "suco",
+            "posto",
+            "municipio",
+            "profession",
+        ]
+        extra_kwargs = {field: {"required": False} for field in fields}
+
+
 class UpdateMyMemberSerializer(serializers.Serializer):
     """
     Fields a member can edit about themselves.

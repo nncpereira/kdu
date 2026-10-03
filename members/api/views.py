@@ -15,6 +15,7 @@ from members.api.serializers import (
     MemberCreateSerializer,
     MemberExitSerializer,
     MemberSerializer,
+    MemberUpdateSerializer,
 )
 from members.models import Member
 from members.services import (
@@ -83,6 +84,43 @@ class MemberDetailView(APIView):
     )
     def get(self, request, pk):
         member = get_object_or_404(Member, pk=pk)
+        return Response(MemberSerializer(member).data)
+
+    @extend_schema(
+        request=MemberUpdateSerializer,
+        responses={200: MemberSerializer},
+        tags=["members"],
+        summary="Edit a member's personal, contact, and address details",
+    )
+    def patch(self, request, pk):
+        member = get_object_or_404(Member, pk=pk)
+        serializer = MemberUpdateSerializer(
+            member, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+
+        changes = {
+            field: {"from": getattr(member, field), "to": new_value}
+            for field, new_value in serializer.validated_data.items()
+            if getattr(member, field) != new_value
+        }
+
+        if changes:
+            serializer.save()
+            record_audit(
+                actor=request.user.profile,
+                action="MEMBER_UPDATED",
+                target_type="MEMBER",
+                target_id=member.id,
+                target_repr=member.full_name,
+                description=f"Updated {', '.join(changes)} for {member.full_name}.",
+                metadata={
+                    field: {"from": str(v["from"]), "to": str(v["to"])}
+                    for field, v in changes.items()
+                },
+                request=request,
+            )
+
         return Response(MemberSerializer(member).data)
 
 

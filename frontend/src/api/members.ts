@@ -60,6 +60,22 @@ export interface CreateMemberPayload {
   endorser_2: string;
 }
 
+export interface UpdateMemberPayload {
+  salutation?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  national_id?: string;
+  phone_number?: string;
+  email?: string;
+  date_of_birth?: string;
+  aldeia?: string;
+  suco?: string;
+  posto?: string;
+  municipio?: string;
+  profession?: string;
+}
+
 export interface PipelineResponse {
   onboarding_id?: string;
   exit_request_id?: string;
@@ -166,6 +182,14 @@ export async function payInitialCapital(
     `/members/${memberId}/initial-capital/`,
     payload
   );
+  return data;
+}
+
+export async function updateMember(
+  memberId: string,
+  payload: UpdateMemberPayload
+): Promise<Member> {
+  const { data } = await api.patch<Member>(`/members/${memberId}/`, payload);
   return data;
 }
 

@@ -35,6 +35,7 @@ class AuditLog(UUIDTimeStampedModel):
         CONFIG_REJECTED = "CONFIG_REJECTED", "Config Change Rejected"
 
         # Domain
+        MEMBER_UPDATED = "MEMBER_UPDATED", "Member Updated"
         MEMBER_EXIT_REQUESTED = "MEMBER_EXIT_REQUESTED", "Member Exit Requested"
         MEMBER_EXIT_COMPLETED = "MEMBER_EXIT_COMPLETED", "Member Exit Completed"
         REVERSAL_REQUESTED = "REVERSAL_REQUESTED", "Reversal Requested"

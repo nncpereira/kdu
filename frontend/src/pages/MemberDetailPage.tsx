@@ -13,6 +13,7 @@ import { Badge } from "@/components/Badge";
 import { Table } from "@/components/Table";
 import { formatMoney, formatDate } from "@/lib/format";
 import { PayInitialCapitalModal } from "./members/PayInitialCapitalModal";
+import { EditMemberModal } from "./members/EditMemberModal";
 import { RequestExitModal } from "./members/RequestExitModal";
 import { DepositModal } from "./savings/DepositModal";
 import { WithdrawModal } from "./savings/WithdrawModal";
@@ -30,6 +31,7 @@ export function MemberDetailPage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
   const [loginModalMode, setLoginModalMode] = useState<"create" | "reset" | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: member, isLoading, isError } = useQuery({
     queryKey: ["member", id],
@@ -81,6 +83,9 @@ export function MemberDetailPage() {
 
   const isSuperadmin = profile?.role === "SUPERADMIN";
   const canMake = profile?.role === "MAKER" || profile?.role === "SUPERADMIN";
+  const canEdit = ["MAKER", "CHECKER", "CERTIFIER", "BOARD", "SUPERADMIN"].includes(
+    profile?.role ?? ""
+  );
   const canPay = canMake && member.status === "Pending";
   const canExit = canMake && member.status === "Active";
 
@@ -119,6 +124,11 @@ export function MemberDetailPage() {
 
       {/* Action bar */}
       <div className="flex gap-2">
+        {canEdit && (
+          <Button variant="secondary" onClick={() => setEditOpen(true)}>
+            Edit Details
+          </Button>
+        )}
         {canMake && member.status === "Active" && (
           <>
             <Button onClick={() => setDepositOpen(true)}>Deposit</Button>
@@ -288,6 +298,11 @@ export function MemberDetailPage() {
         </dl>
       </Card>
 
+      <EditMemberModal
+        member={member}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
       <PayInitialCapitalModal
         member={member}
         open={payOpen}
