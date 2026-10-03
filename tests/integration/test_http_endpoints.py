@@ -2235,6 +2235,12 @@ class TestReportsHTTP:
         assert resp.status_code == 200
         assert "balanced" in resp.data
         assert "total_assets" in resp.data
+        # Revenue/expense accounts are unclosed equity until year-end SHU
+        # payout; the report must fold them in so it always balances.
+        assert resp.data["balanced"] is True
+        assert resp.data["total_assets"] == resp.data["total_liabilities"] + resp.data[
+            "total_equity"
+        ]
 
     def test_maker_cannot_access_reports(self, db, api_for, maker):
         client = api_for(maker)

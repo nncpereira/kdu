@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TableSkeleton } from "@/components/Skeleton";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { listLoans, Loan, LoanStatus } from "@/api/loans";
+import { listLoans, LoanStatus } from "@/api/loans";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getMember,
@@ -18,12 +18,14 @@ import { RequestExitModal } from "./members/RequestExitModal";
 import { DepositModal } from "./savings/DepositModal";
 import { WithdrawModal } from "./savings/WithdrawModal";
 import { getVoluntaryBalance, listTransactions, SavingsTransaction } from "@/api/savings";
+import { listLoans } from "@/api/loans";
 import { OriginateLoanModal } from "./loans/OriginateLoanModal";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { MemberLoginModal } from "./members/MemberLoginModal";
 
 export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const [payOpen, setPayOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -51,6 +53,11 @@ export function MemberDetailPage() {
   const savingsTxnQuery = useQuery({
     queryKey: ["savings", "transactions", id],
     queryFn: () => listTransactions({ member: id }),
+    enabled: !!id,
+  });
+  const activeLoanQuery = useQuery({
+    queryKey: ["loans", "member-active", id],
+    queryFn: () => listLoans({ member: id, status: "DISBURSED", page_size: 1 }),
     enabled: !!id,
   });
 
@@ -96,6 +103,7 @@ export function MemberDetailPage() {
     parseFloat(voluntaryBalance)
   ).toFixed(2);
   const hasHold = parseFloat(voluntaryHeld) > 0;
+  const activeLoan = activeLoanQuery.data?.results[0] ?? null;
 
   return (
     <div className="p-6 space-y-6">
@@ -173,7 +181,7 @@ export function MemberDetailPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card title="Capital (Obligatory)">
+        <Card title="Principal Savings">
           <p className="text-2xl font-bold text-gray-800">
             ${formatMoney(member.kapital_sosial_balance)}
           </p>
@@ -182,7 +190,7 @@ export function MemberDetailPage() {
           </p>
         </Card>
 
-        <Card title="Voluntary Deposits">
+        <Card title="Voluntary Savings">
           <p className="text-2xl font-bold text-blue-700">
             ${formatMoney(voluntaryBalance)}
           </p>
@@ -206,11 +214,32 @@ export function MemberDetailPage() {
           </p>
         </Card>
 
-        <Card title="Status">
-          <p className="text-2xl font-bold text-gray-800">{member.status}</p>
-          <p className="text-xs text-gray-500 mt-1">
-            Joined {formatDate(member.date_joined)}
-          </p>
+        <Card
+          title="Loan Status"
+          onClick={
+            activeLoan ? () => navigate(`/loans/${activeLoan.id}`) : undefined
+          }
+        >
+          {activeLoanQuery.isLoading ? (
+            <p className="text-sm text-gray-500">Loading…</p>
+          ) : activeLoan ? (
+            <>
+              <p className="text-2xl font-bold text-green-700">Active</p>
+              <p className="text-xs text-gray-500 mt-1">
+                ${formatMoney(activeLoan.principal_outstanding)} outstanding
+                — view details
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-gray-400">
+                No Active Loan
+              </p>
+              {/* <p className="text-xs text-gray-500 mt-1">
+                Joined {formatDate(member.date_joined)}
+              </p> */}
+            </>
+          )}
         </Card>
       </div>
 

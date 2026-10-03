@@ -185,16 +185,44 @@ def income_statement(fy_start, fy_end):
 
 def balance_sheet(as_of):
     """
-    Assets (1xxx) = Liabilities (2xxx) + Equity (3xxx).
+    Assets (1xxx) = Liabilities (2xxx) + Equity (3xxx + undistributed
+    net income from 4xxx/5xxx).
+
+    Revenue and expenses only get closed into equity (3900 Retained
+    Surplus) at year-end SHU payout. Before that, their accumulated
+    balance is real, unclosed equity — fold it in here so an interim
+    balance sheet still balances.
     """
     rows = trial_balance(as_of)
     assets = [r for r in rows if r["account_code"].startswith("1")]
     liabilities = [r for r in rows if r["account_code"].startswith("2")]
     equity = [r for r in rows if r["account_code"].startswith("3")]
+    revenue = [r for r in rows if r["account_code"].startswith("4")]
+    expenses = [r for r in rows if r["account_code"].startswith("5")]
 
     total_assets = sum((r["net"] for r in assets), Decimal("0"))
     total_liabilities = sum((-r["net"] for r in liabilities), Decimal("0"))
     total_equity = sum((-r["net"] for r in equity), Decimal("0"))
+
+    net_income = sum((-r["net"] for r in revenue), Decimal("0")) - sum(
+        (r["net"] for r in expenses), Decimal("0")
+    )
+    if net_income != 0:
+        equity = equity + [
+            {
+                "account_code": "",
+                "account_name": (
+                    "Current Year Surplus (Undistributed)"
+                    if net_income >= 0
+                    else "Current Year Deficit (Undistributed)"
+                ),
+                "account_type": "EQUITY",
+                "debit": max(-net_income, Decimal("0")),
+                "credit": max(net_income, Decimal("0")),
+                "net": -net_income,
+            }
+        ]
+        total_equity += net_income
 
     return {
         "assets": assets,
