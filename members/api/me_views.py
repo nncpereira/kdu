@@ -16,7 +16,7 @@ from savings.api.serializers import VoluntaryDepositSerializer
 from savings.models import MemberVoluntaryDeposit
 from savings.models import Transaction as SavingsTxn
 from shu.api.serializers import MyShuPayoutSerializer
-from shu.models import ShuMemberPayout
+from shu.models import ShuCalculation, ShuMemberPayout
 
 
 def _get_member(request):
@@ -310,6 +310,7 @@ class MyShuStatementView(APIView):
 
         payouts = (
             ShuMemberPayout.objects.filter(member=member)
+            .exclude(calc__status=ShuCalculation.Status.REJECTED)
             .select_related("calc", "calc__fy")
             .order_by("-calc__fy__year_end")
         )

@@ -30,3 +30,9 @@ def on_shu_rejected(actor, rejector_user, reason):
     calc = ShuCalculation.objects.select_for_update().get(pk=actor.target_record_id)
     calc.status = ShuCalculation.Status.REJECTED
     calc.save(update_fields=["status", "updated_at"])
+    # Draft payouts are disposable estimates of this calculation, not
+    # independent records (compute_member_payouts recomputes them freely
+    # while pending). A rejected calc is dead, so clear them — otherwise
+    # every member's portal SHU statement shows a phantom duplicate
+    # alongside the real, re-submitted calculation for the same FY.
+    calc.payouts.all().delete()
