@@ -1,0 +1,95 @@
+# Local Docker test environment — a prod-shaped stack (built images,
+# gunicorn, nginx-served SPA) for manual QA on your own machine. Runs
+# fully isolated from your native local dev setup and from prod:
+#   - Separate Postgres container + volume, mapped to host port 5433
+#     (native dev Postgres stays on 5432)
+#   - Backend on host port 8001 (native dev runserver stays on 8000)
+#   - Frontend on host port 8080 (Vite dev server stays on 5173)
+#
+# Usage:
+#   cp .env.test.example .env.test   # fill in a real DJANGO_SECRET_KEY
+#   docker compose -f docker-compose.test.yml up -d --build
+#   docker compose -f docker-compose.test.yml exec backend python manage.py migrate
+#
+# See scripts/load-test-data.sh to copy your real dev DB in for
+# cross-checking against source data.
+
+name: kdu-test
+
+services:
+  db:
+    # Matches your native dev Postgres version (18), not prod's pinned 17 —
+    # load-test-data.sh dumps from dev and restores here, and pg_dump/
+    # pg_restore are safest when dump and restore servers match.
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file: .env.test
+    ports:
+      - "5433:5432"
+    volumes:
+      # postgres:18+ images store data under a major-version-specific
+      # subdirectory of /var/lib/postgresql itself (not .../data as in
+      # 17 and earlier) — see https://github.com/docker-library/postgres/pull/1259
+      - postgres_test_data:/var/lib/postgresql
+    healthcheck:
+      # $$ so this expands from the container's own env (set via
+      # env_file above), not from Compose's variable interpolation,
+      # which always reads the root-level .env regardless of env_file.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kdu-test
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        DJANGO_SETTINGS_MODULE: kdu.settings.staging
+    restart: unless-stopped
+    env_file: .env.test
+    environment:
+      DJANGO_SETTINGS_MODULE: kdu.settings.staging
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    volumes:
+      - static_test_files:/app/staticfiles
+      - media_test_files:/app/media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kdu-test
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/conf.d/kdu-test.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_test_files:/app/staticfiles:ro
+      - media_test_files:/app/media:ro
+    networks:
+      - kdu-test
+
+volumes:
+  postgres_test_data:
+  static_test_files:
+  media_test_files:
+
+networks:
+  kdu-test:
+    driver: bridge
