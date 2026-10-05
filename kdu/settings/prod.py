@@ -48,13 +48,12 @@ STORAGES = {
     },
 }
 
+# Secret from env
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", SECRET_KEY)
 
 # Require all secrets from environment in production
 if SECRET_KEY == "dev-only-insecure-change-me":
     raise RuntimeError("DJANGO_SECRET_KEY must be set in production.")
-
-# Secret from env
-SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 # Database from env
 DATABASES["default"] = {
