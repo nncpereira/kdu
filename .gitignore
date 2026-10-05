@@ -19,6 +19,7 @@ staticfiles/
 .env.*
 !.env.example
 !.env.prod.example
+!.env.test.example
 
 #config
 tox.ini
