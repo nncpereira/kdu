@@ -21,6 +21,11 @@ staticfiles/
 !.env.prod.example
 !.env.test.example
 
+# Real DB dumps (scripts/backup.sh) and Let's Encrypt private keys —
+# only exist on the actual prod server, but must never be committable.
+backups/
+certbot/
+
 #config
 tox.ini
 
@@ -50,5 +55,5 @@ frontend/.env.local
 ~$*.xlsx
 ~$*.xls
 
-Ignore all actual Excel documentation files 
+# Ignore all actual Excel documentation files
 docs/*.xlsx

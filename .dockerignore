@@ -5,6 +5,14 @@
 !.env.prod.example
 !.env.test.example
 
+# Real DB dumps and Let's Encrypt private keys on the prod server.
+# These don't exist in this repo checkout, but docker-compose.prod.yml
+# bind-mounts them and scripts/backup.sh populates them on the actual
+# server — exclude them so a `docker build` run from that same working
+# directory can never bake a real backup or TLS key into an image layer.
+backups/
+certbot/
+
 # VCS / tooling
 .git/
 .github/

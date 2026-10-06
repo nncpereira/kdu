@@ -30,20 +30,22 @@ FROM python:3.12-slim AS production
 
 # Overridable so a non-prod compose file (e.g. docker-compose.test.yml)
 # can collectstatic against a different settings module at build time.
-# Defaults to prod for backward compatibility — docker-compose.prod.yml
-# doesn't pass this, so its behavior is unchanged.
-ARG DJANGO_SETTINGS_MODULE=kdu.settings.staging
+# MUST default to prod: docker-compose.prod.yml doesn't pass this build
+# arg, so whatever default is here is what a real prod build silently
+# gets. docker-compose.test.yml passes kdu.settings.staging explicitly.
+ARG DJANGO_SETTINGS_MODULE=kdu.settings.prod
+
+# Build-time-only placeholder so `collectstatic` doesn't trip prod.py's
+# "DJANGO_SECRET_KEY must be set" guard (collectstatic never touches
+# crypto, so this value doesn't need to be real). The actual secret
+# always comes from env_file at container runtime, which overrides
+# this baked-in default — see docker-compose.prod.yml / .env.prod.
 ARG DJANGO_SECRET_KEY=build-dummy-key-not-used-at-runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE} \
-    DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY} \
-    POSTGRES_DB=kdu_test \
-    POSTGRES_USER=kdu \
-    POSTGRES_PASSWORD=kdu_test \
-    POSTGRES_HOST=db \
-    POSTGRES_PORT=5432
+    DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
 
 WORKDIR /app
 

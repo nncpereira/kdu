@@ -55,12 +55,17 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", SECRET_KEY)
 if SECRET_KEY == "dev-only-insecure-change-me":
     raise RuntimeError("DJANGO_SECRET_KEY must be set in production.")
 
-# Database from env
+# Database from env. `collectstatic` (run at Docker build time, before
+# env_file applies) fully evaluates this settings module without ever
+# connecting to the database, so these fall back to obvious build-time
+# placeholders rather than hard-failing — same trade-off already made
+# for SECRET_KEY above. At real runtime, docker-compose.prod.yml's
+# env_file always supplies the actual values, overriding these.
 DATABASES["default"] = {
     "ENGINE": "django.db.backends.postgresql",
-    "NAME": os.environ["POSTGRES_DB"],
-    "USER": os.environ["POSTGRES_USER"],
-    "PASSWORD": os.environ["POSTGRES_PASSWORD"],
+    "NAME": os.environ.get("POSTGRES_DB", "unset-at-build-time"),
+    "USER": os.environ.get("POSTGRES_USER", "unset-at-build-time"),
+    "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "unset-at-build-time"),
     "HOST": os.environ.get("POSTGRES_HOST", "db"),
     "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     "CONN_MAX_AGE": 60,
