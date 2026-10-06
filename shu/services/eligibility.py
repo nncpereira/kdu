@@ -36,10 +36,16 @@ def month_end_dates(fy_start: date, fy_end: date):
 
 
 def eligible_months(join_date: date, fy_start: date, fy_end: date):
-    """Return {month_end_date: weight} for months the member was active."""
+    """
+    Return {month_end_date: weight} for months the member was active.
+
+    A member is eligible for SHU starting the calendar month they join,
+    full weight, regardless of which day of that month they joined on
+    (board decision — no mid-month cutoff).
+    """
     months = {}
-    for y, m, last in month_end_dates(fy_start, fy_end):
-        if join_date <= date(y, m, 15):
+    for _y, m, last in month_end_dates(fy_start, fy_end):
+        if join_date <= last:
             months[last] = MONTH_WEIGHTS[m]
     return months
 

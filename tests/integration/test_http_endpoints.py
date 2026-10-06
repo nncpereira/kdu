@@ -1710,12 +1710,13 @@ class TestShuHTTP:
         assert july["weighted_balance"] == "12000.00"
         assert july["eligible"] is True
 
-    def test_payout_detail_marks_ineligible_month(
+    def test_payout_detail_join_month_is_fully_eligible(
         self, db, api_for, maker, board, member_factory
     ):
         from shu.models import ShuMemberMonthlyBalance
 
-        # Joined after the 15th of March -> March must not count.
+        # Board rule: no mid-month cutoff -- joining late in March still
+        # counts March in full, at March's own weight.
         late_joiner = member_factory(
             first_name="Late", last_name="Joiner", date_joined="2026-03-26",
         )
@@ -1739,11 +1740,12 @@ class TestShuHTTP:
         )
         assert resp.status_code == 200, resp.content
         march, april = resp.data["monthly_balances"]
-        assert march["eligible"] is False
-        assert march["weight"] == 0
-        assert march["weighted_balance"] == "0.00"
+        assert march["eligible"] is True
+        assert march["weight"] == 4
+        assert march["weighted_balance"] == "496.00"
         assert april["eligible"] is True
         assert april["weight"] == 3
+        assert april["weighted_balance"] == "552.00"
 
     def test_list_fiscal_years(self, db, api_for, checker):
         ShuFiscalYearFactory()
